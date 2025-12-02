@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "flipclock")(type "KiCad")(uri "${KIPRJMOD}/flipclock.kicad_sym")(options "")(descr ""))
+)
