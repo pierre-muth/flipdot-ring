@@ -13,7 +13,7 @@
  */
 
 /*
- © [2025] Microchip Technology Inc. and its subsidiaries.
+ Â© [2025] Microchip Technology Inc. and its subsidiaries.
  
  Subject to your compliance with these terms, you may use Microchip 
  software and any derivatives exclusively with Microchip products. 
@@ -243,6 +243,13 @@ void tmr0InterruptHandler(void) {
     }
 }
 void __interrupt() INTERRUPT_InterruptManager (void) {
+
+ /* TODO
+ - directly process SPI after the flag check to avoid a jump
+ - use the refresh-needed flag in the main loop not in the interrupt 
+   reduce the main loop delay (1ms ? null ?)
+ */
+ 
     // interrupt handler
     if(PIR3bits.SSP1IF == 1) {
         PIR3bits.SSP1IF = 0;
@@ -276,4 +283,5 @@ int main(void) {
     while(1) {
         __delay_ms(250);
     }    
+
 }
