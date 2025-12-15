@@ -13,7 +13,7 @@
  */
 
 /*
- Â© [2025] Microchip Technology Inc. and its subsidiaries.
+ © [2025] Microchip Technology Inc. and its subsidiaries.
  
  Subject to your compliance with these terms, you may use Microchip 
  software and any derivatives exclusively with Microchip products. 
@@ -116,13 +116,14 @@ const uint8_t row_reset_addr[YSIZE] = {
     0b100001,    // row 07H = 0A
 };
 
-const uint16_t flipping_time = 250;
+const uint16_t flipping_time = 200;
 
 uint8_t rxBuffer[XSIZE];
 uint8_t displayBuffer[XSIZE];
 uint8_t displayState[XSIZE];
 uint8_t bufferIndex = 0;
-uint8_t refreshDisplay = 0;
+uint8_t refreshDisplayNeeded = 0;
+uint8_t newDisplayData = 0;
 
 void reset(uint8_t x, uint8_t y) {
     PORTB = col_set_addr[x];
@@ -166,7 +167,7 @@ void animate(){
                 reset(x-4,y);
             }
         }
-        __delay_ms(20);
+        __delay_ms(15);
     }
     for (x=0; x<XSIZE+5; x++){
         if (x < 24) {
@@ -214,50 +215,37 @@ void display(void) {
         displayState[x] = displayBuffer[x];
     }
     
-    refreshDisplay = 0;
+    newDisplayData = 0;
+    refreshDisplayNeeded = 0;
+    
     LED_SetLow();
 }
 
-void spi1InterruptHandler(void) {
-    // put the received byte into the panelBuffer at index, it override the byte that has already be shifted out
-    // increment the buffer index, modulo panel size 24
-    // put the byte from the panelBuffer at this new index into SSP1BUF, it will be shifted out at the next byte reception
-    // reset the timer 
-    // and maybe the SPI interrupt flag
-    
-    rxBuffer[bufferIndex] = SSP1BUF;
-    bufferIndex++;
-    if (bufferIndex >= XSIZE) bufferIndex = 0;
-    SSP1BUF = rxBuffer[bufferIndex];
-    TMR0_Write(0);
-    refreshDisplay = 1;
-}
-
-void tmr0InterruptHandler(void) {
-    // if no new data has been received ?
-    if (refreshDisplay) {
-        SSP1CON1bits.SSPEN = 0; // reset the SPI
-        SSP1CON1bits.SSPEN = 1; // in case wrong clock/data de-sync
-        bufferIndex = 0;        // and the buffer index
-        display();
-    }
-}
+// interrupt handler
 void __interrupt() INTERRUPT_InterruptManager (void) {
-
- /* TODO
- - directly process SPI after the flag check to avoid a jump
- - use the refresh-needed flag in the main loop not in the interrupt 
-   reduce the main loop delay (1ms ? null ?)
- */
- 
-    // interrupt handler
     if(PIR3bits.SSP1IF == 1) {
+        // put the received byte into the panelBuffer at index, it override the byte that has already be shifted out
+        // increment the buffer index, modulo panel size 24
+        // put the byte from the panelBuffer at this new index into SSP1BUF, it will be shifted out at the next byte reception
+        // reset the timer 
+        rxBuffer[bufferIndex] = SSP1BUF;
+        bufferIndex++;
+        if (bufferIndex >= XSIZE) bufferIndex = 0;
+        SSP1BUF = rxBuffer[bufferIndex];
+        TMR0_Write(0);
+        newDisplayData = 1;
         PIR3bits.SSP1IF = 0;
-        spi1InterruptHandler();
     } 
+    
     if(PIR0bits.TMR0IF == 1) {
         PIR0bits.TMR0IF = 0;
-        tmr0InterruptHandler();
+        // if new data has been received and it is time to latch
+        if (newDisplayData) {
+            SSP1CON1bits.SSPEN = 0; // reset the SPI
+            SSP1CON1bits.SSPEN = 1; // in case wrong clock/data de-sync
+            bufferIndex = 0;        // and the buffer index
+            refreshDisplayNeeded = 1;
+        }
     } 
 }
 int main(void) {   
@@ -281,7 +269,8 @@ int main(void) {
     INTERRUPT_PeripheralInterruptEnable(); 
     
     while(1) {
-        __delay_ms(250);
+        if (refreshDisplayNeeded) {
+            display();
+        }
     }    
-
 }
