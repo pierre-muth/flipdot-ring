@@ -6,10 +6,10 @@
 #define DATAPIN    13
 #define CLOCKPIN   14
 
-static const int spiClk = 80000; 
+static const int spiClk = 100000; 
 
 SPIClass * hspi = NULL; //uninitalised pointers to SPI object
- 
+int xShift=0;
 
 DotFlippersMatrix::DotFlippersMatrix(int16_t w, int16_t h) : 
     Adafruit_GFX(w, h) {
@@ -50,24 +50,30 @@ void DotFlippersMatrix::clear(uint8_t color) {
 void DotFlippersMatrix::drawPixel(int16_t x, int16_t y, uint16_t color) {
     // Serial.printf("x=%d, y=%d, c=%d\n", x, y, color);
     if (x<0 || y<0) return;
-    if (x>=WIDTH || y>=HEIGHT) {
+    if (y >= HEIGHT) return;
+    if (x>=WIDTH) {
         x = x%WIDTH;
-        y = y%HEIGHT;
     }
     drawingBuffer[(y*WIDTH)+x] = color;
 
 }
 
+void DotFlippersMatrix::setXshift(int shift) {
+    xShift = shift;
+}
+
 void DotFlippersMatrix::display() {
     uint8_t mask = 0x00;
+    int xOffset = 0;
 
     for(int x=0; x<WIDTH; x++) {
+        xOffset = (x+xShift)%WIDTH;
         for(int y=0; y<HEIGHT; y++){
             mask = 0x01 << y;
             if (drawingBuffer[(y*WIDTH) + x] != 0) {
-                flipdotBuffer[ x ] |= mask;
+                flipdotBuffer[ WIDTH-1-x ] |= mask;
             } else {
-                flipdotBuffer[ x ] &= ~mask;
+                flipdotBuffer[ WIDTH-1-x ] &= ~mask;
             }
         }
     }

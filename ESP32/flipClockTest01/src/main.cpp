@@ -5,7 +5,8 @@
 #include "DotFlippersMatrix.h"
 #include <SPIFFS.h>
 #include "time.h"
-#include "Fonts/Picopixel.h"
+#include "Fonts/Org_01.h"
+#include <Muth01_4.h>
 
 // constants
 const char* ntpServer = "pool.ntp.org";
@@ -22,9 +23,9 @@ uint8_t animation[] = {
 0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
 1,1,1,0,1,1,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,0,
-1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,
-0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,1,1,1,0,0,0,1,1,1,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,
+1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,
+1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,
 1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,
 0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,
 0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0,0,
@@ -122,36 +123,51 @@ void setup() {
 }
 
 int count = 0;
-uint8_t color = 0;
+uint8_t color = 1;
 
 void loop() {
     
-    for(int x=0; x<288; x++){
-        color = animation[(x+count)%288];
-        dotFlippersMatrix.drawPixel(x, 0, color);
-        color = animation[(x+count+1)%288];
-        dotFlippersMatrix.drawPixel(x, 1, color);
-        color = animation[(x+count+2)%288];
-        dotFlippersMatrix.drawPixel(x, 2, color);
-        color = animation[(x+count+3)%288];
-        dotFlippersMatrix.drawPixel(x, 3, color);
-        color = animation[(x+count+2)%288];
-        dotFlippersMatrix.drawPixel(x, 4, color);
-        color = animation[(x+count+1)%288];
-        dotFlippersMatrix.drawPixel(x, 5, color);
-        color = animation[(x+count)%288];
-        dotFlippersMatrix.drawPixel(x, 6, color);
-    }
+    // for(int x=0; x<288; x++){
+    //     color = animation[(x+count)%288];
+    //     dotFlippersMatrix.drawPixel(x, 0, color);
+    //     color = animation[(x+count+1)%288];
+    //     dotFlippersMatrix.drawPixel(x, 1, color);
+    //     color = animation[(x+count+2)%288];
+    //     dotFlippersMatrix.drawPixel(x, 2, color);
+    //     color = animation[(x+count+3)%288];
+    //     dotFlippersMatrix.drawPixel(x, 3, color);
+    //     color = animation[(x+count+2)%288];
+    //     dotFlippersMatrix.drawPixel(x, 4, color);
+    //     color = animation[(x+count+1)%288];
+    //     dotFlippersMatrix.drawPixel(x, 5, color);
+    //     color = animation[(x+count)%288];
+    //     dotFlippersMatrix.drawPixel(x, 6, color);
+    // }
+    // dotFlippersMatrix.display();
+    // count += 1;
+    // delay(20);
+
+    dotFlippersMatrix.setXshift(0);
+    dotFlippersMatrix.clear(1);
     dotFlippersMatrix.display();
-    count += 1;
-    delay(50);
-
-    // dotFlippersMatrix.clear(0);
-    // dotFlippersMatrix.display();
-    // delay(1000);
-
-    // dotFlippersMatrix.clear(1);
-    // dotFlippersMatrix.display();
-    // delay(1000);
+    delay(10000);
     
+    dotFlippersMatrix.clear(0);
+    dotFlippersMatrix.display();
+    delay(10000);
+
+    // dotFlippersMatrix.setFont(&Org_01);
+    dotFlippersMatrix.clear(0);
+    dotFlippersMatrix.setCursor(0,0);
+    dotFlippersMatrix.setTextColor(0xFF);
+    dotFlippersMatrix.print("TESTING ... RING FLIP DOT DISPLAY ... 7 x 288");
+
+    for(int x=0; x<288; x++){
+        dotFlippersMatrix.setXshift(-x);
+        dotFlippersMatrix.display();
+        delay(40);
+    }
+
+    delay(10000);
+
 }
