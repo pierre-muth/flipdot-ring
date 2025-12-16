@@ -59,17 +59,20 @@ void DotFlippersMatrix::drawPixel(int16_t x, int16_t y, uint16_t color) {
 }
 
 void DotFlippersMatrix::setXshift(int shift) {
+    //// if shift is < 0, it means xShift = WIDTH + shift
+    //// also shift = shift%WITDH
     xShift = shift;
 }
 
 void DotFlippersMatrix::display() {
     uint8_t mask = 0x00;
     int xOffset = 0;
-
+    
     for(int x=0; x<WIDTH; x++) {
         xOffset = (x+xShift)%WIDTH;
         for(int y=0; y<HEIGHT; y++){
             mask = 0x01 << y;
+            //// use xShifted instead of x in the test
             if (drawingBuffer[(y*WIDTH) + x] != 0) {
                 flipdotBuffer[ WIDTH-1-x ] |= mask;
             } else {
@@ -98,4 +101,5 @@ DotFlippersMatrix::~DotFlippersMatrix(void) {
         free(flipdotBuffer);
         flipdotBuffer = NULL;
     }
+
 }
