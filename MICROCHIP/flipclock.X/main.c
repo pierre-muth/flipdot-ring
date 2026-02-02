@@ -13,7 +13,7 @@
  */
 
 /*
- © [2025] Microchip Technology Inc. and its subsidiaries.
+ Â© [2025] Microchip Technology Inc. and its subsidiaries.
  
  Subject to your compliance with these terms, you may use Microchip 
  software and any derivatives exclusively with Microchip products. 
@@ -116,15 +116,16 @@ const uint8_t row_reset_addr[YSIZE] = {
     0b100001,    // row 07H = 0A
 };
 
-const uint16_t flipping_time = 200;
-
 uint8_t rxBuffer[XSIZE];
 uint8_t displayBuffer[XSIZE];
 uint8_t displayState[XSIZE];
+uint16_t flipping_time = 200;
 uint8_t bufferIndex = 0;
 uint8_t refreshDisplayNeeded = 0;
 uint8_t newDisplayData = 0;
+uint8_t forceFlipping = 0;
 
+// reset a dot to black state at x, y coordinate
 void reset(uint8_t x, uint8_t y) {
     PORTB = col_set_addr[x];
     PORTA = row_set_addr[y];
@@ -133,9 +134,9 @@ void reset(uint8_t x, uint8_t y) {
     __delay_us(flipping_time);
     colE_SetLow();
     rowE_SetLow();
-//    __delay_ms(500);
 }
 
+// set a dot to yellow state at x, y coordinate
 void set(uint8_t x, uint8_t y) {
     PORTB = col_reset_addr[x];
     PORTA = row_reset_addr[y];
@@ -144,8 +145,9 @@ void set(uint8_t x, uint8_t y) {
     __delay_us(flipping_time);
     colE_SetLow();
     rowE_SetLow();
-//    __delay_ms(500);
 }
+
+// Startup animation
 void animate(){
     uint8_t x, y;
 
@@ -187,24 +189,48 @@ void animate(){
     
     LED_SetLow();
 }
+
+// Copy rxBuffer to displayBuffer, and scan all the dots and change the state accordingly
+// and finally copy displayBuffer to displayState
 void display(void) {
     LED_SetHigh();
-    uint8_t x, y, segmentState, segment, mask;
-    
+    uint8_t x, y, segmentState, segment, mask, flipTimeOpt;
+
+    // copy rxBuffer to displayBuffer
     for (x=0; x<XSIZE; x++){
         displayBuffer[XSIZE-x-1] = rxBuffer[x];
     }
-    
+
+    // if there is a new configuration, update the display parameters.
+    if (displayBuffer[0] & 0b10000000) {
+        // decode the flipping time parameter
+        if (displayBuffer[1] & 0b10000000) flipTimeOpt |= 0b00000001;
+        if (displayBuffer[2] & 0b10000000) flipTimeOpt |= 0b00000010;
+        if (displayBuffer[3] & 0b10000000) flipTimeOpt |= 0b00000100;
+        if (displayBuffer[4] & 0b10000000) flipTimeOpt |= 0b00001000;
+        flipping_time = 100 * flipTimeOpt;
+
+        // decode the 'force or skip' driving parameter
+        if (displayBuffer[5] & 0b10000000) forceFlipping = 1;
+        else forceFlipping = 0;
+    }
+
+    // scan all the dots
     for (y=0; y<YSIZE; y++){
         mask = 0b1 << y;
         for (x=0; x<XSIZE; x++){
             segment = displayBuffer[x];
             segmentState = displayState[x];
-            
-            if ((mask & segment) == (mask & segmentState)) {
-                continue;
+
+            // if we are not forcing the dot flipping.
+            if (!forceFlipping) {
+                // then if there is no state change then we skip the driving.
+                if ((mask & segment) == (mask & segmentState)) {
+                    continue;
+                }
             }
-            
+
+            // Drive the flipping.
             if ( (mask & segment) > 0){
                 set(x,y);
             } else {
@@ -213,11 +239,13 @@ void display(void) {
             
         }
     }
-    
+
+    // copy displayBuffer to displayState
     for (x=0; x<XSIZE; x++){
         displayState[x] = displayBuffer[x];
     }
-    
+
+    // reset status flags
     newDisplayData = 0;
     refreshDisplayNeeded = 0;
     
@@ -226,27 +254,36 @@ void display(void) {
 
 // interrupt handler
 void __interrupt() INTERRUPT_InterruptManager (void) {
+    // We have an SPI interrupt
     if(PIR3bits.SSP1IF == 1) {
-        // put the received byte into the panelBuffer at index, it override the byte that has already be shifted out
-        // increment the buffer index, modulo panel size 24
-        // put the byte from the panelBuffer at this new index into SSP1BUF, it will be shifted out at the next byte reception
-        // reset the timer 
+     
+        // put the received byte into the panelBuffer at index, it overrides the byte that has already be shifted out
         rxBuffer[bufferIndex] = SSP1BUF;
+        // increment the buffer index, modulo panel size 24
         bufferIndex++;
         if (bufferIndex >= XSIZE) bufferIndex = 0;
+        // put the byte from the panelBuffer at this new index into SSP1BUF, it will be shifted out at the next byte reception
         SSP1BUF = rxBuffer[bufferIndex];
+        // reset the timer
         TMR0_Write(0);
+        // set the new data flag
         newDisplayData = 1;
+        // reset interrupt flag
         PIR3bits.SSP1IF = 0;
     } 
-    
+
+    // We have a Timer0 interrupt
     if(PIR0bits.TMR0IF == 1) {
+        // reset interrupt flag
         PIR0bits.TMR0IF = 0;
-        // if new data has been received and it is time to latch
+        // if new data has been received, it is time to latch
         if (newDisplayData) {
-            SSP1CON1bits.SSPEN = 0; // reset the SPI
-            SSP1CON1bits.SSPEN = 1; // in case wrong clock/data de-sync
-            bufferIndex = 0;        // and the buffer index
+            // reset the SPI in case wrong clock/data de-sync
+            SSP1CON1bits.SSPEN = 0; 
+            SSP1CON1bits.SSPEN = 1;  
+            // reset the buffer index
+            bufferIndex = 0;       
+            // set the display refresh-needed flag. display refresh happens outside interrupt excecution.
             refreshDisplayNeeded = 1;
         }
     } 
@@ -255,11 +292,11 @@ int main(void) {
     // init 
     SYSTEM_Initialize();
     
-    // animation
+    // animation at startup
     animate();
     __delay_ms(1000);
             
-    // enable SPI1
+    // enable SPI1 and its interrupt
     SPI1_Open(CLIENT_CONFIG);
     SSP1CON1bits.SSPEN = 1;
     PIE3bits.SSP1IE = 1;
@@ -267,13 +304,15 @@ int main(void) {
     // enable timer0 interrupt
     PIE0bits.TMR0IE = 1;
     
-    // enable interrupts
+    // enable global & perif interrupts
     INTERRUPT_GlobalInterruptEnable(); 
     INTERRUPT_PeripheralInterruptEnable(); 
     
     while(1) {
+        // If needed, launch the dot display driving 
         if (refreshDisplayNeeded) {
             display();
         }
     }    
+
 }
