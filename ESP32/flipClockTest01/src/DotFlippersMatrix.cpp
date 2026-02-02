@@ -79,6 +79,10 @@ void DotFlippersMatrix::display() {
         }
     }
 
+    // TODO 
+    // set the options bits for every panels (WIDTH/24)
+    // caution: bytes are pushed, coordiate 0 is the last byte.
+
     hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
     hspi->transferBytes(flipdotBuffer , NULL, WIDTH);
     hspi->endTransaction();
@@ -99,4 +103,5 @@ DotFlippersMatrix::~DotFlippersMatrix(void) {
         free(flipdotBuffer);
         flipdotBuffer = NULL;
     }
+
 }
