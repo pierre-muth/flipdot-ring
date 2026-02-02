@@ -146,28 +146,65 @@ void loop() {
     // dotFlippersMatrix.display();
     // count += 1;
     // delay(20);
-
-    dotFlippersMatrix.setXshift(0);
+    
+    dotFlippersMatrix.setXshift(1);
     dotFlippersMatrix.clear(1);
     dotFlippersMatrix.display();
-    delay(10000);
-    
+    delay(2000);
     dotFlippersMatrix.clear(0);
     dotFlippersMatrix.display();
-    delay(10000);
+    delay(2000);
+
+
+    // for(int x=0; x<4; x++){
+    //     dotFlippersMatrix.clear(1);
+    //     dotFlippersMatrix.display();
+    //     delay(2000);
+        
+    //     dotFlippersMatrix.clear(0);
+    //     dotFlippersMatrix.display();
+    //     delay(2000);
+    // }
+
+
+    // for(int x=0; x<6; x++){
+    //     dotFlippersMatrix.fillRect(x*48,0, 7,7, 1);
+    //     dotFlippersMatrix.fillCircle(16+ (x*48),3,3, 1);
+    //     dotFlippersMatrix.drawLine(22+(x*48), 0, 29+(x*48), 7, 1);
+    //     dotFlippersMatrix.drawLine(22+(x*48), 7, 29+(x*48), 0, 1);
+    // }
+
+    // for(int x=0; x<288; x++){
+    //     dotFlippersMatrix.setXshift(-x);
+    //     dotFlippersMatrix.display();
+    //     delay(20);
+    // }
+    // for(int x=0; x<288; x++){
+    //     dotFlippersMatrix.setXshift(x);
+    //     dotFlippersMatrix.display();
+    //     delay(20);
+    // }
 
     // dotFlippersMatrix.setFont(&Org_01);
     dotFlippersMatrix.clear(0);
     dotFlippersMatrix.setCursor(0,0);
     dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.print("TESTING ... RING FLIP DOT DISPLAY ... 7 x 288");
-
+    // dotFlippersMatrix.print("TESTING ... RING FLIP DOT DISPLAY ... 7 x 288");
+    dotFlippersMatrix.print("HAPPY NEW YEAR ! Best wishes for 2026 !");
+    dotFlippersMatrix.display();
+    delay(2000);
+    
     for(int x=0; x<288; x++){
         dotFlippersMatrix.setXshift(-x);
         dotFlippersMatrix.display();
-        delay(40);
+        delay(21);
+    }
+    for(int x=288; x>=0; x--){
+        dotFlippersMatrix.setXshift(-x);
+        dotFlippersMatrix.display();
+        delay(21);
     }
 
-    delay(10000);
+    delay(2000);
 
 }
