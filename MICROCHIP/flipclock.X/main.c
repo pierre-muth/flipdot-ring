@@ -133,6 +133,7 @@ void reset(uint8_t x, uint8_t y) {
     __delay_us(flipping_time);
     colE_SetLow();
     rowE_SetLow();
+//    __delay_ms(500);
 }
 
 void set(uint8_t x, uint8_t y) {
@@ -143,6 +144,7 @@ void set(uint8_t x, uint8_t y) {
     __delay_us(flipping_time);
     colE_SetLow();
     rowE_SetLow();
+//    __delay_ms(500);
 }
 void animate(){
     uint8_t x, y;
@@ -208,6 +210,7 @@ void display(void) {
             } else {
                 reset(x,y);
             }
+            
         }
     }
     
