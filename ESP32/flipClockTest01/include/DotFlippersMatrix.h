@@ -9,6 +9,8 @@ class DotFlippersMatrix : public Adafruit_GFX {
         void clear(uint8_t color);
         void invert(void);
         void display(void);
+        void drawStringRotated180(int16_t x, int16_t y, const char *str, uint16_t color);
+
 
         ~DotFlippersMatrix(void);
     
@@ -16,5 +18,6 @@ class DotFlippersMatrix : public Adafruit_GFX {
         uint8_t *drawingBuffer;
         uint8_t *flipdotBuffer;
         
+
 
 };
