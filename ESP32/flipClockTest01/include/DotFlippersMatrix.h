@@ -9,15 +9,20 @@ class DotFlippersMatrix : public Adafruit_GFX {
         void clear(uint8_t color);
         void invert(void);
         void display(void);
+        void setXshift(int shift);
         void drawStringRotated180(int16_t x, int16_t y, const char *str, uint16_t color);
-
-
+        void setFlipTime(uint8_t time) { customFlipTime = time; }
+        void setForceFlipping(bool force) { forceFlipping = force; }
+        void setCustomConfiguration(bool custom) { customConfiguration = custom; }
+        
         ~DotFlippersMatrix(void);
     
     private:
         uint8_t *drawingBuffer;
         uint8_t *flipdotBuffer;
-        
+        bool customConfiguration = false;
+        bool forceFlipping = false;
+        uint8_t customFlipTime = 2; // flip time in 100us unit, default to 200us
 
 
 };

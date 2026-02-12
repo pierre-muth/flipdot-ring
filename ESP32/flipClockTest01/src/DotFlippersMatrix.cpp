@@ -26,7 +26,7 @@ boolean DotFlippersMatrix::begin() {
         return false;
     }
 
-    // init data to be trasmitted 
+    // init data to be transmitted 
     if((!flipdotBuffer) && !(flipdotBuffer = (uint8_t *)malloc(WIDTH))) {
         return false;
     }
@@ -75,7 +75,9 @@ void DotFlippersMatrix::display() {
     uint8_t mask = 0x00;
     int xOffset = 0;
 
-    // scan over the drawing buufer and build the transmission buffer. 
+    memset(flipdotBuffer, 0, WIDTH);  
+
+    // scan over the drawing buffer and build the transmission buffer. 
     // First column transmitted will be pushed to the last position of the display 
     for(int x=0; x<WIDTH; x++) {
         xOffset = (x+xShift)%WIDTH;
@@ -89,21 +91,96 @@ void DotFlippersMatrix::display() {
         }
     }
 
-    // TODO 
-    // set the options bits for every panels (WIDTH/24)
-    // caution: bytes are pushed, coordiate 0 is the last byte.
+    // set the options bits for each of the 12 panels
+    for (int i=0; i<12; i++) {
+        if (customConfiguration) {
+            flipdotBuffer[(i*24)+23] |= 0x80; // set the custom configuration bit for i panel
+        }
+        if (customFlipTime & 0b00000001) {
+            flipdotBuffer[(i*24)+22] |= 0x80; // set the custom flip time bit for i panel
+        }
+        if (customFlipTime & 0b00000010) {
+            flipdotBuffer[(i*24)+21] |= 0x80; // set the custom flip time bit for i panel
+        }
+        if (customFlipTime & 0b00000100) {
+            flipdotBuffer[(i*24)+20] |= 0x80; // set the custom flip time bit for i panel
+        }
+        if (customFlipTime & 0b00001000) {
+            flipdotBuffer[(i*24)+19] |= 0x80; // set the custom flip time bit for i panel
+        }
+        if (forceFlipping) {
+            flipdotBuffer[(i*24)+18] |= 0x80; // set the force flipping bit for i panel
+        }
+    }
+    
 
     // transmit
     hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
     hspi->transferBytes(flipdotBuffer , NULL, WIDTH);
     hspi->endTransaction();
 
-    Serial.print(".");
-    // for (int i=0; i<WIDTH; i++) {
-    //     Serial.print(flipdotBuffer[i], HEX);
-    //     Serial.print(" ");
-    // }
+    // debug: print the transmission buffer vertically
+    for (int i=0; i<WIDTH; i++) {
+        for(int j=0; j<8; j++) {
+            if(j%8 == 7) {
+                if ((flipdotBuffer[i] >> j) & 0x01) Serial.print(" 1");
+                else Serial.print(" 0");
+            } else {
+                if ((flipdotBuffer[i] >> j) & 0x01) Serial.print("#");
+                else Serial.print(" ");
+            }
+        }
+        if(i%24 == 23) Serial.println(" < custom config bit ");
+        else if(i%24 == 22) Serial.println(" < flip time bit 0");
+        else if(i%24 == 21) Serial.println(" < flip time bit 1");
+        else if(i%24 == 20) Serial.println(" < flip time bit 2");
+        else if(i%24 == 19) Serial.println(" < flip time bit 3");
+        else if(i%24 == 18) Serial.println(" < force flipping bit");
+        else Serial.println("");
+    }
+    Serial.println("--------");
 }
+
+// 180° - Text upside down
+void DotFlippersMatrix::drawStringRotated180(int16_t x, int16_t y, const char *str, uint16_t color) {
+    // Step 1: Create temp buffer
+    uint8_t tempBuf[WIDTH * HEIGHT];
+    memset(tempBuf, 0, WIDTH * HEIGHT);
+    
+    uint8_t *savedBuf = drawingBuffer;
+    drawingBuffer = tempBuf;
+    
+    // Step 2: Draw text at origin
+    setCursor(0, 0);
+    setTextColor(color);
+    print(str);
+    
+    // Step 3: Rotate 180°: flip both horizontally and vertically
+    for(int row = 0; row < HEIGHT; row++) {
+        for(int col = 0; col < WIDTH; col++) {
+            int srcIdx = row * WIDTH + col;
+            int newCol = WIDTH - 1 - col;
+            int newRow = HEIGHT - 1 - row;
+            int dstIdx = newRow * WIDTH + newCol;
+            
+            drawingBuffer[dstIdx] = tempBuf[srcIdx];
+        }
+    }
+    
+    // Step 4: Apply offset
+    drawingBuffer = savedBuf;
+    for(int row = 0; row < HEIGHT; row++) {
+        for(int col = 0; col < WIDTH; col++) {
+            int newCol = col + x;
+            int newRow = row + y;
+            
+            if(newCol < WIDTH && newRow < HEIGHT && tempBuf[row * WIDTH + col]) {
+                drawingBuffer[newRow * WIDTH + newCol] = color;
+            }
+        }
+    }
+}
+
 
 // object deletion
 DotFlippersMatrix::~DotFlippersMatrix(void) {

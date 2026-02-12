@@ -6,31 +6,15 @@
 #include <SPIFFS.h>
 #include "time.h"
 #include "Fonts/Org_01.h"
-#include <Muth01_4.h>
 
 // constants
 const char* ntpServer = "pool.ntp.org";
 const char* ssid = "BoiteVivante";
 const char* password = "82F7625EEC6894868EA329F8E1";
 
-
 // global vars
 struct tm timeinfo;
 uint8_t time_digits[] = {0,0,0,0,0,0};
-uint8_t animation[] = {
-1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,1,
-0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-1,1,1,0,1,1,1,0,1,1,1,0,0,0,1,0,0,0,1,0,0,0,1,0,
-1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,
-1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,
-1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,
-1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,
-0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,0,0,0,0,1,1,1,1,
-0,0,0,0,0,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0,0,
-1,1,0,0,1,1,0,0,1,1,0,0,1,1,0,0,1,1,0,0,1,1,0,0
-};
 DotFlippersMatrix dotFlippersMatrix = DotFlippersMatrix(288, 7);
 
 void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -113,6 +97,9 @@ void setup() {
   dotFlippersMatrix.begin();
   delay(1000); 
 
+  dotFlippersMatrix.setCustomConfiguration(true);
+  dotFlippersMatrix.setForceFlipping(true);
+  dotFlippersMatrix.setFlipTime(2); // set flip time to 200us
   dotFlippersMatrix.clear(0);
   dotFlippersMatrix.display();
   delay(1000);
@@ -127,27 +114,7 @@ uint8_t color = 1;
 
 void loop() {
     
-    // for(int x=0; x<288; x++){
-    //     color = animation[(x+count)%288];
-    //     dotFlippersMatrix.drawPixel(x, 0, color);
-    //     color = animation[(x+count+1)%288];
-    //     dotFlippersMatrix.drawPixel(x, 1, color);
-    //     color = animation[(x+count+2)%288];
-    //     dotFlippersMatrix.drawPixel(x, 2, color);
-    //     color = animation[(x+count+3)%288];
-    //     dotFlippersMatrix.drawPixel(x, 3, color);
-    //     color = animation[(x+count+2)%288];
-    //     dotFlippersMatrix.drawPixel(x, 4, color);
-    //     color = animation[(x+count+1)%288];
-    //     dotFlippersMatrix.drawPixel(x, 5, color);
-    //     color = animation[(x+count)%288];
-    //     dotFlippersMatrix.drawPixel(x, 6, color);
-    // }
-    // dotFlippersMatrix.display();
-    // count += 1;
-    // delay(20);
-    
-    dotFlippersMatrix.setXshift(1);
+    dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.clear(1);
     dotFlippersMatrix.display();
     delay(2000);
@@ -155,56 +122,22 @@ void loop() {
     dotFlippersMatrix.display();
     delay(2000);
 
-
-    // for(int x=0; x<4; x++){
-    //     dotFlippersMatrix.clear(1);
-    //     dotFlippersMatrix.display();
-    //     delay(2000);
-        
-    //     dotFlippersMatrix.clear(0);
-    //     dotFlippersMatrix.display();
-    //     delay(2000);
-    // }
-
-
-    // for(int x=0; x<6; x++){
-    //     dotFlippersMatrix.fillRect(x*48,0, 7,7, 1);
-    //     dotFlippersMatrix.fillCircle(16+ (x*48),3,3, 1);
-    //     dotFlippersMatrix.drawLine(22+(x*48), 0, 29+(x*48), 7, 1);
-    //     dotFlippersMatrix.drawLine(22+(x*48), 7, 29+(x*48), 0, 1);
-    // }
-
-    // for(int x=0; x<288; x++){
-    //     dotFlippersMatrix.setXshift(-x);
-    //     dotFlippersMatrix.display();
-    //     delay(20);
-    // }
-    // for(int x=0; x<288; x++){
-    //     dotFlippersMatrix.setXshift(x);
-    //     dotFlippersMatrix.display();
-    //     delay(20);
-    // }
-
     // dotFlippersMatrix.setFont(&Org_01);
     dotFlippersMatrix.clear(0);
     dotFlippersMatrix.setCursor(0,0);
     dotFlippersMatrix.setTextColor(0xFF);
-    // dotFlippersMatrix.print("TESTING ... RING FLIP DOT DISPLAY ... 7 x 288");
-    dotFlippersMatrix.print("HAPPY NEW YEAR ! Best wishes for 2026 !");
+    dotFlippersMatrix.print("TESTING ... RING FLIP DOT DISPLAY ... 7 x 288");
     dotFlippersMatrix.display();
-    delay(2000);
+    delay(60000);
     
-    for(int x=0; x<288; x++){
-        dotFlippersMatrix.setXshift(-x);
-        dotFlippersMatrix.display();
-        delay(21);
-    }
-    for(int x=288; x>=0; x--){
-        dotFlippersMatrix.setXshift(-x);
-        dotFlippersMatrix.display();
-        delay(21);
-    }
-
-    delay(2000);
-
+    // for(int x=0; x<288; x++){
+    //     dotFlippersMatrix.setXshift(-x);
+    //     dotFlippersMatrix.display();
+    //     delay(21);
+    // }
+    // for(int x=288; x>=0; x--){
+    //     dotFlippersMatrix.setXshift(-x);
+    //     dotFlippersMatrix.display();
+    //     delay(21);
+    // }
 }
