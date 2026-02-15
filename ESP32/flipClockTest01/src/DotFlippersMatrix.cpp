@@ -7,6 +7,7 @@
 #define CLOCKPIN   14
 
 static const int spiClk = 100000; 
+static const int CHARWIDTH = 6; // 5 pixels for character + 1 pixel for spacing
 
 SPIClass * hspi = NULL; //uninitalised pointers to SPI object
 int xShift=0;
@@ -28,6 +29,11 @@ boolean DotFlippersMatrix::begin() {
 
     // init data to be transmitted 
     if((!flipdotBuffer) && !(flipdotBuffer = (uint8_t *)malloc(WIDTH))) {
+        return false;
+    }
+
+    // init temp buffer for text rotation
+    if((!tempBuf) && !(tempBuf = (uint8_t *)malloc(WIDTH * HEIGHT))) {
         return false;
     }
 
@@ -96,16 +102,16 @@ void DotFlippersMatrix::display() {
         if (customConfiguration) {
             flipdotBuffer[(i*24)+23] |= 0x80; // set the custom configuration bit for i panel
         }
-        if (customFlipTime & 0b00000001) {
+        if (customDotFlipTime & 0b00000001) {
             flipdotBuffer[(i*24)+22] |= 0x80; // set the custom flip time bit for i panel
         }
-        if (customFlipTime & 0b00000010) {
+        if (customDotFlipTime & 0b00000010) {
             flipdotBuffer[(i*24)+21] |= 0x80; // set the custom flip time bit for i panel
         }
-        if (customFlipTime & 0b00000100) {
+        if (customDotFlipTime & 0b00000100) {
             flipdotBuffer[(i*24)+20] |= 0x80; // set the custom flip time bit for i panel
         }
-        if (customFlipTime & 0b00001000) {
+        if (customDotFlipTime & 0b00001000) {
             flipdotBuffer[(i*24)+19] |= 0x80; // set the custom flip time bit for i panel
         }
         if (forceFlipping) {
@@ -141,46 +147,43 @@ void DotFlippersMatrix::display() {
     Serial.println("--------");
 }
 
-// 180° - Text upside down
-void DotFlippersMatrix::drawStringRotated180(int16_t x, int16_t y, const char *str, uint16_t color) {
-    // Step 1: Create temp buffer
-    uint8_t tempBuf[WIDTH * HEIGHT];
-    memset(tempBuf, 0, WIDTH * HEIGHT);
+// Text upside down
+void DotFlippersMatrix::drawCharsUpSideDown(int16_t x, int16_t y, const char *str, uint16_t color) {
+    memset(tempBuf, 0, WIDTH * HEIGHT); // clear the temp buffer
     
-    uint8_t *savedBuf = drawingBuffer;
+    uint8_t *savedBuf = drawingBuffer; // save the original drawing buffer pointer
+    uint16_t spriteWidth = strlen(str) * CHARWIDTH; // calculate the width of the text sprite, including spacing
+    spriteWidth -= 1; // remove the last spacing
+    
+    // Draw text at origin in temp buffer and restore the original drawing buffer
     drawingBuffer = tempBuf;
-    
-    // Step 2: Draw text at origin
     setCursor(0, 0);
     setTextColor(color);
     print(str);
-    
-    // Step 3: Rotate 180°: flip both horizontally and vertically
+    drawingBuffer = savedBuf;
+
+    // flip the text sprite horizontally and vertically
     for(int row = 0; row < HEIGHT; row++) {
-        for(int col = 0; col < WIDTH; col++) {
-            int srcIdx = row * WIDTH + col;
-            int newCol = WIDTH - 1 - col;
+        for(int col = 0; col < spriteWidth; col++) {
+
+            int srcIdx = (row * WIDTH) + col;
+
+            int newCol = spriteWidth - 1 - col;
             int newRow = HEIGHT - 1 - row;
+            
+            newCol += x; // shift the text horizontally
+            newRow += y; // shift the text vertically
+
+            if (newCol < 0 || newRow < 0 || newCol >= WIDTH || newRow >= HEIGHT) {
+                continue; // skip if the new position is out of bounds
+            }
+            
             int dstIdx = newRow * WIDTH + newCol;
             
             drawingBuffer[dstIdx] = tempBuf[srcIdx];
         }
     }
-    
-    // Step 4: Apply offset
-    drawingBuffer = savedBuf;
-    for(int row = 0; row < HEIGHT; row++) {
-        for(int col = 0; col < WIDTH; col++) {
-            int newCol = col + x;
-            int newRow = row + y;
-            
-            if(newCol < WIDTH && newRow < HEIGHT && tempBuf[row * WIDTH + col]) {
-                drawingBuffer[newRow * WIDTH + newCol] = color;
-            }
-        }
-    }
 }
-
 
 // object deletion
 DotFlippersMatrix::~DotFlippersMatrix(void) {
@@ -192,6 +195,4 @@ DotFlippersMatrix::~DotFlippersMatrix(void) {
         free(flipdotBuffer);
         flipdotBuffer = NULL;
     }
-
 }
-

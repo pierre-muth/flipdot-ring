@@ -1,16 +1,14 @@
 #include <Arduino.h>
 #include <WiFi.h>
 #include "Adafruit_GFX.h"
-#include "Adafruit_I2CDevice.h"
 #include "DotFlippersMatrix.h"
-#include <SPIFFS.h>
 #include "time.h"
-#include "Fonts/Org_01.h"
 
 // constants
 const char* ntpServer = "pool.ntp.org";
 const char* ssid = "BoiteVivante";
 const char* password = "82F7625EEC6894868EA329F8E1";
+
 
 // global vars
 struct tm timeinfo;
@@ -99,45 +97,30 @@ void setup() {
 
   dotFlippersMatrix.setCustomConfiguration(true);
   dotFlippersMatrix.setForceFlipping(true);
-  dotFlippersMatrix.setFlipTime(2); // set flip time to 200us
+  dotFlippersMatrix.setDotFlipTime(6); // set flip time 
+  dotFlippersMatrix.setXshift(0);
   dotFlippersMatrix.clear(0);
   dotFlippersMatrix.display();
   delay(1000);
   
-//   connectWiFi();
-//   delay(1000);
-
 }
 
 int count = 0;
 uint8_t color = 1;
 
 void loop() {
-    
-    dotFlippersMatrix.setXshift(0);
-    dotFlippersMatrix.clear(1);
-    dotFlippersMatrix.display();
-    delay(2000);
+
     dotFlippersMatrix.clear(0);
     dotFlippersMatrix.display();
-    delay(2000);
+    delay(1000);
 
-    // dotFlippersMatrix.setFont(&Org_01);
     dotFlippersMatrix.clear(0);
     dotFlippersMatrix.setCursor(0,0);
     dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.print("TESTING ... RING FLIP DOT DISPLAY ... 7 x 288");
+    dotFlippersMatrix.drawCharsUpSideDown(0, 0, "A7", 0xFF);
+    dotFlippersMatrix.setCursor(12,0);
+    dotFlippersMatrix.print("1M");
     dotFlippersMatrix.display();
-    delay(60000);
-    
-    // for(int x=0; x<288; x++){
-    //     dotFlippersMatrix.setXshift(-x);
-    //     dotFlippersMatrix.display();
-    //     delay(21);
-    // }
-    // for(int x=288; x>=0; x--){
-    //     dotFlippersMatrix.setXshift(-x);
-    //     dotFlippersMatrix.display();
-    //     delay(21);
-    // }
+    delay(10000);
+
 }
