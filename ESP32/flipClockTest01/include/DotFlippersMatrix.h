@@ -1,6 +1,5 @@
 #include <Adafruit_GFX.h>
 
-
 class DotFlippersMatrix : public Adafruit_GFX {
     public:
         DotFlippersMatrix(int16_t w, int16_t h);
@@ -10,8 +9,8 @@ class DotFlippersMatrix : public Adafruit_GFX {
         void invert(void);
         void display(void);
         void setXshift(int shift);
-        void drawStringRotated180(int16_t x, int16_t y, const char *str, uint16_t color);
-        void setFlipTime(uint8_t time) { customFlipTime = time; }
+        void drawCharsUpSideDown(int16_t x, int16_t y, const char *str, uint16_t color);
+        void setDotFlipTime(uint8_t time) { customDotFlipTime = time; }
         void setForceFlipping(bool force) { forceFlipping = force; }
         void setCustomConfiguration(bool custom) { customConfiguration = custom; }
         
@@ -20,9 +19,10 @@ class DotFlippersMatrix : public Adafruit_GFX {
     private:
         uint8_t *drawingBuffer;
         uint8_t *flipdotBuffer;
+        uint8_t *tempBuf;
         bool customConfiguration = false;
         bool forceFlipping = false;
-        uint8_t customFlipTime = 2; // flip time in 100us unit, default to 200us
+        uint8_t customDotFlipTime = 2; // flip time in 100us unit, default to 200us
 
 
 };
