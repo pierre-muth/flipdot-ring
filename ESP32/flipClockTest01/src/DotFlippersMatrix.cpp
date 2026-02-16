@@ -33,13 +33,12 @@ boolean DotFlippersMatrix::begin() {
     }
 
     // init temp buffer for text rotation
-    if((!tempBuf) && !(tempBuf = (uint8_t *)malloc(WIDTH * HEIGHT))) {
+    if((!tempBuffer) && !(tempBuffer = (uint8_t *)malloc(WIDTH * HEIGHT))) {
         return false;
     }
 
     // clear the arrays
     clear(0x00);
-    display();
 
     return true;
 }
@@ -149,14 +148,14 @@ void DotFlippersMatrix::display() {
 
 // Text upside down
 void DotFlippersMatrix::drawCharsUpSideDown(int16_t x, int16_t y, const char *str, uint16_t color) {
-    memset(tempBuf, 0, WIDTH * HEIGHT); // clear the temp buffer
+    memset(tempBuffer, 0, WIDTH * HEIGHT); // clear the temp buffer
     
     uint8_t *savedBuf = drawingBuffer; // save the original drawing buffer pointer
     uint16_t spriteWidth = strlen(str) * CHARWIDTH; // calculate the width of the text sprite, including spacing
     spriteWidth -= 1; // remove the last spacing
     
     // Draw text at origin in temp buffer and restore the original drawing buffer
-    drawingBuffer = tempBuf;
+    drawingBuffer = tempBuffer;
     setCursor(0, 0);
     setTextColor(color);
     print(str);
@@ -180,7 +179,7 @@ void DotFlippersMatrix::drawCharsUpSideDown(int16_t x, int16_t y, const char *st
             
             int dstIdx = newRow * WIDTH + newCol;
             
-            drawingBuffer[dstIdx] = tempBuf[srcIdx];
+            drawingBuffer[dstIdx] = tempBuffer[srcIdx];
         }
     }
 }
@@ -194,5 +193,9 @@ DotFlippersMatrix::~DotFlippersMatrix(void) {
     if (flipdotBuffer) {
         free(flipdotBuffer);
         flipdotBuffer = NULL;
+    }
+    if(tempBuffer) {
+        free(tempBuffer);
+        tempBuffer = NULL;
     }
 }
