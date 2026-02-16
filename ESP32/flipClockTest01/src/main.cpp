@@ -90,6 +90,7 @@ void setup() {
     // initialize serial and wait for it to be ready
     Serial.begin(115200);
     while (!Serial) { ; }
+
     pinMode(15, INPUT_PULLUP);
 
     // get time from RTC
@@ -110,6 +111,7 @@ void setup() {
         Serial.println("Time is already synced less than an hour ago, no need to connect to WiFi.");
     }
     
+    // initialize flipdot display
     dotFlippersMatrix.begin();
     dotFlippersMatrix.setCustomConfiguration(true); // custom config
     dotFlippersMatrix.setForceFlipping(true);
@@ -119,12 +121,12 @@ void setup() {
 
     uint16_t xMinutePosition = 0;
     char buf[4];
-    
+
     // minutes in a char array
     sniprintf(buf, 4, "%02d", timeinfo.tm_min);
     
     // calculate x position of minutes, based on the hour and minute
-    xMinutePosition = ((((timeinfo.tm_hour%12)/12.0)*(displayWidth)) + ((timeinfo.tm_min/60.0)*(15.0)));
+    xMinutePosition = ((((timeinfo.tm_hour%12)/12.0)*(displayWidth)) + ((timeinfo.tm_min/60.0)*(13.0)));
 
     // if the hour is between 3 and 9, draw minutes upside down, otherwise draw normally
     if (timeinfo.tm_hour%12 >=3 && timeinfo.tm_hour%12 < 9) {
