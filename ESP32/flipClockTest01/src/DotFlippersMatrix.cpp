@@ -5,6 +5,7 @@
 
 #define DATAPIN    13
 #define CLOCKPIN   14
+// #define DEBUG
 
 static const int spiClk = 100000; 
 static const int CHARWIDTH = 6; // 5 pixels for character + 1 pixel for spacing
@@ -125,6 +126,7 @@ void DotFlippersMatrix::display() {
     hspi->endTransaction();
 
     // debug: print the transmission buffer vertically
+    #ifdef DEBUG
     for (int i=0; i<WIDTH; i++) {
         for(int j=0; j<8; j++) {
             if(j%8 == 7) {
@@ -144,6 +146,7 @@ void DotFlippersMatrix::display() {
         else Serial.println("");
     }
     Serial.println("--------");
+    #endif
 }
 
 // Text upside down

@@ -1,22 +1,227 @@
 #include <Arduino.h>
 #include <WiFi.h>
+#include <WebServer.h>
+#include <Preferences.h>
 #include "Adafruit_GFX.h"
 #include "DotFlippersMatrix.h"
 #include "time.h"
 
 // constants
 const char* ntpServer = "pool.ntp.org";
-const char* ssid = "BoiteVivante";
-const char* password = "82F7625EEC6894868EA329F8E1";
 static const char* PARIS_TZ = "CET-1CEST,M3.5.0/2,M10.5.0/3";
 RTC_DATA_ATTR static int hourOfLastSinceSync = -1;
 
 const uint16_t displayWidth = 288;
 const uint16_t displayHeight = 7;
+const int CONFIG_PIN = 15;
+
+// Configuration structure
+struct Config {
+    char wifiSSID[32];
+    char wifiPassword[64];
+    char timezone[64];
+    bool customConfiguration;
+    bool forceFlipping;
+    uint8_t dotFlipTime;
+    bool initialized;
+};
 
 // global vars
 struct tm timeinfo;
 DotFlippersMatrix dotFlippersMatrix = DotFlippersMatrix(displayWidth, displayHeight);
+Preferences preferences;
+Config config;
+WebServer server(80);
+
+// Load configuration from preferences
+void loadConfig() {
+    preferences.begin("clock-config", true); // read-only
+    config.initialized = preferences.getBool("initialized", false);
+    
+    if (config.initialized) {
+        preferences.getString("ssid", config.wifiSSID, sizeof(config.wifiSSID));
+        preferences.getString("password", config.wifiPassword, sizeof(config.wifiPassword));
+        preferences.getString("timezone", config.timezone, sizeof(config.timezone));
+        config.customConfiguration = preferences.getBool("customConfig", true);
+        config.forceFlipping = preferences.getBool("forceFlip", true);
+        config.dotFlipTime = preferences.getUChar("dotFlipTime", 4);
+        Serial.println("Configuration loaded from storage");
+    } else {
+        // Set defaults
+        strcpy(config.wifiSSID, "");
+        strcpy(config.wifiPassword, "");
+        strcpy(config.timezone, PARIS_TZ);
+        config.customConfiguration = true;
+        config.forceFlipping = true;
+        config.dotFlipTime = 4; // default to 400us
+        Serial.println("No configuration found, using defaults");
+    }
+    
+    preferences.end();
+}
+
+// Save configuration to preferences
+void saveConfig() {
+    preferences.begin("clock-config", false); // read-write
+    preferences.putBool("initialized", true);
+    preferences.putString("ssid", config.wifiSSID);
+    preferences.putString("password", config.wifiPassword);
+    preferences.putString("timezone", config.timezone);
+    preferences.putBool("customConfig", config.customConfiguration);
+    preferences.putBool("forceFlip", config.forceFlipping);
+    preferences.putUChar("dotFlipTime", config.dotFlipTime);
+    preferences.end();
+    config.initialized = true;
+    Serial.println("Configuration saved to storage");
+}
+
+// HTML configuration page
+const char htmlPage[] PROGMEM = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Clock Configuration</title>
+    <style>
+        body { font-family: Arial; margin: 20px; background: #f0f0f0; }
+        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1 { color: #333; text-align: center; }
+        h2 { color: #555; font-size: 18px; margin-top: 25px; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; }
+        label { display: block; margin-top: 15px; font-weight: bold; color: #555; }
+        input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
+        .checkbox-group { margin-top: 15px; }
+        .checkbox-group label { display: inline-block; font-weight: normal; margin-left: 8px; }
+        .checkbox-group input[type="checkbox"] { width: auto; }
+        button { width: 100%; padding: 12px; margin-top: 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
+        button:hover { background: #45a049; }
+        .info { background: #e7f3fe; padding: 10px; border-left: 4px solid #2196F3; margin-bottom: 20px; font-size: 14px; }
+        .help { font-size: 12px; color: #888; margin-top: 3px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⏰ Flip Clock Configuration</h1>
+        <div class="info">Configure your WiFi, timezone, and flipdot display settings.</div>
+        <form action="/save" method="POST">
+            <h2>📡 WiFi Settings</h2>
+            <label>WiFi SSID:</label>
+            <input type="text" name="ssid" required placeholder="Enter WiFi network name">
+            
+            <label>WiFi Password:</label>
+            <input type="password" name="password" placeholder="Enter WiFi password">
+            
+            <label>Timezone (POSIX format):</label>
+            <input type="text" name="timezone" value="CET-1CEST,M3.5.0/2,M10.5.0/3" placeholder="e.g., CET-1CEST,M3.5.0/2,M10.5.0/3">
+            <div class="help">Examples: CET-1CEST,M3.5.0/2,M10.5.0/3 (Europe Paris) | PST8PDT,M3.2.0,M11.1.0 (US Pacific)</div>
+            
+            <h2>🔢 Flipdot Display Settings</h2>
+            <div class="checkbox-group">
+                <input type="checkbox" id="customConfig" name="customConfig" value="1" checked>
+                <label for="customConfig">Custom Configuration</label>
+            </div>
+            <div class="help">Enable custom display configuration</div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="forceFlip" name="forceFlip" value="1" checked>
+                <label for="forceFlip">Force Flipping</label>
+            </div>
+            <div class="help">Force all dots to flip even if no change</div>
+            
+            <label>Dot Flip Time (in 100s of us):</label>
+            <input type="number" name="dotFlipTime" value="4" min="1" max="15" placeholder="4">
+            <div class="help">Time in 100s of microseconds for each dot to flip (1-15, default: 4)</div>
+            
+            <button type="submit">Save Configuration</button>
+        </form>
+    </div>
+</body>
+</html>
+)rawliteral";
+
+// Web server handlers
+void handleRoot() {
+    server.send(200, "text/html", htmlPage);
+}
+
+void handleSave() {
+    if (server.hasArg("ssid")) {
+        String ssid = server.arg("ssid");
+        String password = server.arg("password");
+        String timezone = server.arg("timezone");
+        
+        ssid.toCharArray(config.wifiSSID, sizeof(config.wifiSSID));
+        password.toCharArray(config.wifiPassword, sizeof(config.wifiPassword));
+        timezone.toCharArray(config.timezone, sizeof(config.timezone));
+        
+        // Get flipdot display settings
+        config.customConfiguration = server.hasArg("customConfig");
+        config.forceFlipping = server.hasArg("forceFlip");
+        
+        if (server.hasArg("dotFlipTime")) {
+            int flipTime = server.arg("dotFlipTime").toInt();
+            config.dotFlipTime = constrain(flipTime, 1, 15); // constrain to valid range
+        } else {
+            config.dotFlipTime = 4; // default
+        }
+        
+        saveConfig();
+        
+        String response = "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial;text-align:center;padding:50px;background:#f0f0f0;}";
+        response += ".message{background:white;padding:30px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);max-width:400px;margin:0 auto;}";
+        response += "h1{color:#4CAF50;}</style></head><body><div class='message'><h1>✓ Configuration Saved!</h1>";
+        response += "<p>Device will restart in 3 seconds...</p></div></body></html>";
+        
+        server.send(200, "text/html", response);
+        delay(3000);
+        ESP.restart();
+    } else {
+        server.send(400, "text/plain", "Missing parameters");
+    }
+}
+
+// Start configuration mode (Access Point + Web Server)
+void startConfigMode() {
+    Serial.println("Starting configuration mode...");
+    
+    // Initialize flipdot display
+    delay(500); // small delay to ensure display is ready after power up
+    dotFlippersMatrix.begin();
+    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration);
+    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
+    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime);
+    dotFlippersMatrix.setXshift(0);
+    dotFlippersMatrix.setTextColor(0xFF);
+    dotFlippersMatrix.clear(0);
+    
+    // Create Access Point
+    WiFi.mode(WIFI_AP);
+    WiFi.softAP("FlipClock", "12345678");
+    
+    IPAddress IP = WiFi.softAPIP();
+    Serial.print("AP IP address: ");
+    Serial.println(IP);
+    Serial.println("Connect to WiFi 'FlipClock' with password '12345678'");
+    Serial.println("Then open http://192.168.4.1 in your browser");
+    
+    // Display setup info on flipdot display
+    dotFlippersMatrix.setCursor(0, 0);
+    dotFlippersMatrix.print("WiFi FlipClock:12345678  http://192.168.4.1");
+    dotFlippersMatrix.display();
+    
+    // Initialize web server
+    server.on("/", handleRoot);
+    server.on("/save", HTTP_POST, handleSave);
+    server.begin();
+    
+    Serial.println("Web server started");
+    
+    // Keep server running
+    while (true) {
+        server.handleClient();
+        delay(10);
+    }
+}
 
 void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     switch (event) {
@@ -47,20 +252,33 @@ void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     }
 }
 
-
 // connect to wifi
 void connectWiFi() {
     WiFi.persistent(false);
     WiFi.setAutoReconnect(false);
     WiFi.mode(WIFI_STA);
     WiFi.onEvent(WiFiEvent);
-    WiFi.begin("CERN");
-    // WiFi.begin(ssid, password);
+    
+    // Use stored configuration
+    if (strlen(config.wifiSSID) > 0) {
+        Serial.print("Connecting to: ");
+        Serial.println(config.wifiSSID);
+        WiFi.begin(config.wifiSSID, config.wifiPassword);
+    } else {
+        Serial.println("No WiFi SSID configured!");
+        return;
+    }
+    
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - start) < 10000) {
         delay(500);
     }
-    Serial.println(F("WiFi connexion"));
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println(F("WiFi connected"));
+    } else {
+        Serial.println(F("WiFi connection failed"));
+    }
 }
 
 //disable WiFi completely
@@ -72,17 +290,20 @@ void disableWiFi() {
     Serial.println("WiFi disabled");
 }
 
-// go into deep sleep for 1 minute
-void goToDeepSleep() {
-    Serial.println("Going to deep sleep for 1 minute...");
-    esp_sleep_enable_timer_wakeup(1 * 60 * 1000000);
+// go into deep sleep for 1 minute minus negativeDelayS seconds
+void goToDeepSleep1m(int negativeDelayS = 0) {
+    Serial.print("Going to deep sleep for ");
+    Serial.print(60 - negativeDelayS);
+    Serial.println(" seconds");
+    delay(100); // to flush serial buffer
+    esp_sleep_enable_timer_wakeup((60 - negativeDelayS) * 1000000);
     esp_deep_sleep_start();
 }
 
 // confiture timezone for NTP
 void configTimeZone() {
     configTime(3600, 3600, ntpServer, ntpServer, ntpServer);
-    setenv("TZ", PARIS_TZ, 1);
+    setenv("TZ", config.timezone, 1);
     tzset();
 }
 
@@ -91,7 +312,20 @@ void setup() {
     Serial.begin(115200);
     while (!Serial) { ; }
 
-    pinMode(15, INPUT_PULLUP);
+    // Setup configuration pin and load configuration
+    pinMode(CONFIG_PIN, INPUT_PULLUP);
+    loadConfig();
+    
+    // Check if configuration button is pressed OR configuration is not initialized
+    if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
+        if (digitalRead(CONFIG_PIN) == LOW) {
+            Serial.println("Configuration button pressed - entering setup mode");
+        } else {
+            Serial.println("No WiFi configuration found - entering setup mode");
+        }
+        startConfigMode();
+        // startConfigMode() runs forever, so we never reach here
+    }
 
     // get time from RTC
     configTimeZone(); // configure timezone otherwise we may get wrong time from RTC, which is not in UTC
@@ -113,9 +347,9 @@ void setup() {
     
     // initialize flipdot display
     dotFlippersMatrix.begin();
-    dotFlippersMatrix.setCustomConfiguration(true); // custom config
-    dotFlippersMatrix.setForceFlipping(true);
-    dotFlippersMatrix.setDotFlipTime(6); // set flipping time 
+    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
+    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
+    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
     dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.setTextColor(0xFF);
 
@@ -126,17 +360,17 @@ void setup() {
     sniprintf(buf, 4, "%02d", timeinfo.tm_min);
     
     // calculate x position of minutes, based on the hour and minute
-    xMinutePosition = ((((timeinfo.tm_hour%12)/12.0)*(displayWidth)) + ((timeinfo.tm_min/60.0)*(13.0)));
+    xMinutePosition = ((((timeinfo.tm_hour%12)/12.0)*(displayWidth)) + ((timeinfo.tm_min/60.0)*(14.0)));
 
     // if the hour is between 3 and 9, draw minutes upside down, otherwise draw normally
     if (timeinfo.tm_hour%12 >=3 && timeinfo.tm_hour%12 < 9) {
         dotFlippersMatrix.drawCharsUpSideDown(xMinutePosition, 0, buf, 0xFF);
     } else {
         dotFlippersMatrix.setCursor(xMinutePosition, 0);
-        dotFlippersMatrix.print(timeinfo.tm_min);
+        dotFlippersMatrix.print(String(buf));
     }
 
-    // draw a box starting or ending at 0 up to the position of the minutes, to represent the hours
+    // draw a box starting or ending at 0, up to the position of the minutes, to represent the hours
     if (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24) {
         if (xMinutePosition < displayWidth-14) {
             dotFlippersMatrix.fillRect(xMinutePosition+14, 2, displayWidth - (xMinutePosition+14), 3, 0xFF);
@@ -151,26 +385,17 @@ void setup() {
     dotFlippersMatrix.display();
 
     Serial.println(&timeinfo, "%A %d %B %Y %H:%M:%S");
-    Serial.println("previous sync hour: " + String(hourOfLastSinceSync));
+    Serial.println("Previous wifi sync hour: " + String(hourOfLastSinceSync));
 
     disableWiFi();
-    delay(200); // to flush serial buffer 
-    goToDeepSleep();
+
+    int compensationDelayS = 0;
+    // we can reduce the deep sleep time to wake up closer to the next minute
+    if (timeinfo.tm_sec > 3) compensationDelayS = 2; 
+    if (timeinfo.tm_sec > 20) compensationDelayS = 5; 
+    goToDeepSleep1m(compensationDelayS);
 }
 
 void loop() {
-
-    // dotFlippersMatrix.clear(0);
-    // dotFlippersMatrix.display();
-    // delay(1000);
-
-    // dotFlippersMatrix.clear(0);
-    // dotFlippersMatrix.setCursor(0,0);
-    // dotFlippersMatrix.setTextColor(0xFF);
-    // dotFlippersMatrix.drawCharsUpSideDown(0, 0, "A7", 0xFF);
-    // dotFlippersMatrix.setCursor(12,0);
-    // dotFlippersMatrix.print("1M");
-    // dotFlippersMatrix.display();
-    // delay(10000);
 
 }
