@@ -19,10 +19,9 @@ class DotFlippersMatrix : public Adafruit_GFX {
     private:
         uint8_t *drawingBuffer;
         uint8_t *flipdotBuffer;
-        uint8_t *tempBuf;
+        uint8_t *tempBuffer;
         bool customConfiguration = false;
         bool forceFlipping = false;
-        uint8_t customDotFlipTime = 2; // flip time in 100us unit, default to 200us
-
+        uint8_t customDotFlipTime = 4; // flip time in 100us unit, default to 400us
 
 };
