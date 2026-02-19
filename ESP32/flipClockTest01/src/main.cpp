@@ -22,6 +22,7 @@ struct Config {
     char timezone[64];
     bool customConfiguration;
     bool forceFlipping;
+    bool driversPowerSaving;
     uint8_t dotFlipTime;
     bool initialized;
 };
@@ -44,6 +45,7 @@ void loadConfig() {
         preferences.getString("timezone", config.timezone, sizeof(config.timezone));
         config.customConfiguration = preferences.getBool("customConfig", true);
         config.forceFlipping = preferences.getBool("forceFlip", true);
+        config.driversPowerSaving = preferences.getBool("driversPowerSave", false);
         config.dotFlipTime = preferences.getUChar("dotFlipTime", 4);
         Serial.println("Configuration loaded from storage");
     } else {
@@ -53,6 +55,7 @@ void loadConfig() {
         strcpy(config.timezone, PARIS_TZ);
         config.customConfiguration = true;
         config.forceFlipping = true;
+        config.driversPowerSaving = false;
         config.dotFlipTime = 4; // default to 400us
         Serial.println("No configuration found, using defaults");
     }
@@ -69,6 +72,7 @@ void saveConfig() {
     preferences.putString("timezone", config.timezone);
     preferences.putBool("customConfig", config.customConfiguration);
     preferences.putBool("forceFlip", config.forceFlipping);
+    preferences.putBool("driversPowerSave", config.driversPowerSaving);
     preferences.putUChar("dotFlipTime", config.dotFlipTime);
     preferences.end();
     config.initialized = true;
@@ -126,7 +130,13 @@ const char htmlPage[] PROGMEM = R"rawliteral(
                 <input type="checkbox" id="forceFlip" name="forceFlip" value="1" checked>
                 <label for="forceFlip">Force Flipping</label>
             </div>
-            <div class="help">Force all dots to flip even if no change</div>
+            <div class="help">Force dots flipping even if no change</div>
+            
+            <div class="checkbox-group">
+                <input type="checkbox" id="driversPowerSave" name="driversPowerSave" value="1">
+                <label for="driversPowerSave">Drivers Power Saving</label>
+            </div>
+            <div class="help">Switching drivers 5V off between display refreshes</div>
             
             <label>Dot Flip Time (in 100s of us):</label>
             <input type="number" name="dotFlipTime" value="4" min="1" max="15" placeholder="4">
@@ -157,6 +167,7 @@ void handleSave() {
         // Get flipdot display settings
         config.customConfiguration = server.hasArg("customConfig");
         config.forceFlipping = server.hasArg("forceFlip");
+        config.driversPowerSaving = server.hasArg("driversPowerSave");
         
         if (server.hasArg("dotFlipTime")) {
             int flipTime = server.arg("dotFlipTime").toInt();
@@ -189,6 +200,7 @@ void startConfigMode() {
     dotFlippersMatrix.begin();
     dotFlippersMatrix.setCustomConfiguration(config.customConfiguration);
     dotFlippersMatrix.setForceFlipping(config.forceFlipping);
+    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
     dotFlippersMatrix.setDotFlipTime(config.dotFlipTime);
     dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.setTextColor(0xFF);
@@ -269,6 +281,7 @@ void connectWiFi() {
         return;
     }
     
+    // Wait for connection with a timeout of 10 seconds
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - start) < 10000) {
         delay(500);
@@ -349,6 +362,7 @@ void setup() {
     dotFlippersMatrix.begin();
     dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
     dotFlippersMatrix.setForceFlipping(config.forceFlipping);
+    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
     dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
     dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.setTextColor(0xFF);
@@ -391,8 +405,8 @@ void setup() {
 
     int compensationDelayS = 0;
     // we can reduce the deep sleep time to wake up closer to the next minute
-    if (timeinfo.tm_sec > 3) compensationDelayS = 2; 
-    if (timeinfo.tm_sec > 20) compensationDelayS = 5; 
+    if (timeinfo.tm_sec > 2) compensationDelayS = 2; 
+    if (timeinfo.tm_sec > 20) compensationDelayS = 7; 
     goToDeepSleep1m(compensationDelayS);
 }
 

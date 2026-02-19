@@ -5,7 +5,7 @@
 
 #define DATAPIN    13
 #define CLOCKPIN   14
-// #define DEBUG
+#define DEBUG
 
 static const int spiClk = 100000; 
 static const int CHARWIDTH = 6; // 5 pixels for character + 1 pixel for spacing
@@ -117,6 +117,9 @@ void DotFlippersMatrix::display() {
         if (forceFlipping) {
             flipdotBuffer[(i*24)+18] |= 0x80; // set the force flipping bit for i panel
         }
+        if (driversPowerSaving) {
+            flipdotBuffer[(i*24)+17] |= 0x80; // set the drivers power saving bit for i panel
+        }
     }
     
 
@@ -133,7 +136,7 @@ void DotFlippersMatrix::display() {
                 if ((flipdotBuffer[i] >> j) & 0x01) Serial.print(" 1");
                 else Serial.print(" 0");
             } else {
-                if ((flipdotBuffer[i] >> j) & 0x01) Serial.print("#");
+                if ((flipdotBuffer[i] >> j) & 0x01) Serial.print("●");
                 else Serial.print(" ");
             }
         }
@@ -143,6 +146,7 @@ void DotFlippersMatrix::display() {
         else if(i%24 == 20) Serial.println(" < flip time bit 2");
         else if(i%24 == 19) Serial.println(" < flip time bit 3");
         else if(i%24 == 18) Serial.println(" < force flipping bit");
+        else if(i%24 == 17) Serial.println(" < drivers power saving bit");
         else Serial.println("");
     }
     Serial.println("--------");
