@@ -13,6 +13,7 @@ class DotFlippersMatrix : public Adafruit_GFX {
         void setDotFlipTime(uint8_t time) { customDotFlipTime = time; }
         void setForceFlipping(bool force) { forceFlipping = force; }
         void setCustomConfiguration(bool custom) { customConfiguration = custom; }
+        void setDriversPowerSaving(bool powerSaving) { driversPowerSaving = powerSaving; }
         
         ~DotFlippersMatrix(void);
     
@@ -22,6 +23,7 @@ class DotFlippersMatrix : public Adafruit_GFX {
         uint8_t *tempBuffer;
         bool customConfiguration = false;
         bool forceFlipping = false;
+        bool driversPowerSaving = false;
         uint8_t customDotFlipTime = 4; // flip time in 100us unit, default to 400us
 
 };
