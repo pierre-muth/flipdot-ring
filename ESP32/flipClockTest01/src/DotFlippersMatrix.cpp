@@ -122,7 +122,6 @@ void DotFlippersMatrix::display() {
         }
     }
     
-
     // transmit
     hspi->beginTransaction(SPISettings(spiClk, MSBFIRST, SPI_MODE0));
     hspi->transferBytes(flipdotBuffer , NULL, WIDTH);
@@ -149,7 +148,7 @@ void DotFlippersMatrix::display() {
         else if(i%24 == 17) Serial.println(" < drivers power saving bit");
         else Serial.println("");
     }
-    Serial.println("--------");
+    Serial.println("------- -");
     #endif
 }
 

@@ -45,7 +45,7 @@ void loadConfig() {
         preferences.getString("timezone", config.timezone, sizeof(config.timezone));
         config.customConfiguration = preferences.getBool("customConfig", true);
         config.forceFlipping = preferences.getBool("forceFlip", true);
-        config.driversPowerSaving = preferences.getBool("driversPowerSave", false);
+        config.driversPowerSaving = preferences.getBool("FPpowSave", false);
         config.dotFlipTime = preferences.getUChar("dotFlipTime", 4);
         Serial.println("Configuration loaded from storage");
     } else {
@@ -72,7 +72,7 @@ void saveConfig() {
     preferences.putString("timezone", config.timezone);
     preferences.putBool("customConfig", config.customConfiguration);
     preferences.putBool("forceFlip", config.forceFlipping);
-    preferences.putBool("driversPowerSave", config.driversPowerSaving);
+    preferences.putBool("FPpowSave", config.driversPowerSaving);
     preferences.putUChar("dotFlipTime", config.dotFlipTime);
     preferences.end();
     config.initialized = true;
@@ -133,7 +133,7 @@ const char htmlPage[] PROGMEM = R"rawliteral(
             <div class="help">Force dots flipping even if no change</div>
             
             <div class="checkbox-group">
-                <input type="checkbox" id="driversPowerSave" name="driversPowerSave" value="1">
+                <input type="checkbox" id="driversPowerSave" name="driversPowerSave" value="1" checked>
                 <label for="driversPowerSave">Drivers Power Saving</label>
             </div>
             <div class="help">Switching drivers 5V off between display refreshes</div>
@@ -149,9 +149,51 @@ const char htmlPage[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
+String escapeHtml(const char *input) {
+    String out;
+    if (!input) {
+        return out;
+    }
+
+    for (const char *p = input; *p; ++p) {
+        switch (*p) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            case '"': out += "&quot;"; break;
+            case '\'': out += "&#39;"; break;
+            default: out += *p; break;
+        }
+    }
+
+    return out;
+}
+
+String buildConfigPageHtml() {
+    String page = FPSTR(htmlPage);
+
+    page.replace("name=\"ssid\" required placeholder=\"Enter WiFi network name\"",
+                 "name=\"ssid\" required value=\"" + escapeHtml(config.wifiSSID) + "\" placeholder=\"Enter WiFi network name\"");
+    page.replace("name=\"password\" placeholder=\"Enter WiFi password\"",
+                 "name=\"password\" value=\"" + escapeHtml(config.wifiPassword) + "\" placeholder=\"Enter WiFi password\"");
+    page.replace("name=\"timezone\" value=\"CET-1CEST,M3.5.0/2,M10.5.0/3\"",
+                 "name=\"timezone\" value=\"" + escapeHtml(config.timezone) + "\"");
+    page.replace("name=\"dotFlipTime\" value=\"4\"",
+                 "name=\"dotFlipTime\" value=\"" + String(config.dotFlipTime) + "\"");
+
+    page.replace("id=\"customConfig\" name=\"customConfig\" value=\"1\" checked",
+                 String("id=\"customConfig\" name=\"customConfig\" value=\"1\"") + (config.customConfiguration ? " checked" : ""));
+    page.replace("id=\"forceFlip\" name=\"forceFlip\" value=\"1\" checked",
+                 String("id=\"forceFlip\" name=\"forceFlip\" value=\"1\"") + (config.forceFlipping ? " checked" : ""));
+    page.replace("id=\"driversPowerSave\" name=\"driversPowerSave\" value=\"1\" checked",
+                 String("id=\"driversPowerSave\" name=\"driversPowerSave\" value=\"1\"") + (config.driversPowerSaving ? " checked" : ""));
+
+    return page;
+}
+
 // Web server handlers
 void handleRoot() {
-    server.send(200, "text/html", htmlPage);
+    server.send(200, "text/html", buildConfigPageHtml());
 }
 
 void handleSave() {
@@ -195,17 +237,6 @@ void handleSave() {
 void startConfigMode() {
     Serial.println("Starting configuration mode...");
     
-    // Initialize flipdot display
-    delay(500); // small delay to ensure display is ready after power up
-    dotFlippersMatrix.begin();
-    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration);
-    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
-    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
-    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime);
-    dotFlippersMatrix.setXshift(0);
-    dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.clear(0);
-    
     // Create Access Point
     WiFi.mode(WIFI_AP);
     WiFi.softAP("FlipClock", "12345678");
@@ -217,6 +248,8 @@ void startConfigMode() {
     Serial.println("Then open http://192.168.4.1 in your browser");
     
     // Display setup info on flipdot display
+    dotFlippersMatrix.clear(0);
+    dotFlippersMatrix.display(); 
     dotFlippersMatrix.setCursor(0, 0);
     dotFlippersMatrix.print("WiFi FlipClock:12345678  http://192.168.4.1");
     dotFlippersMatrix.display();
@@ -329,6 +362,15 @@ void setup() {
     pinMode(CONFIG_PIN, INPUT_PULLUP);
     loadConfig();
     
+    // initialize flipdot display
+    dotFlippersMatrix.begin();
+    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
+    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
+    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
+    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
+    dotFlippersMatrix.setXshift(0);
+    dotFlippersMatrix.setTextColor(0xFF);
+
     // Check if configuration button is pressed OR configuration is not initialized
     if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
         if (digitalRead(CONFIG_PIN) == LOW) {
@@ -358,14 +400,7 @@ void setup() {
         Serial.println("Time is already synced less than an hour ago, no need to connect to WiFi.");
     }
     
-    // initialize flipdot display
-    dotFlippersMatrix.begin();
-    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
-    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
-    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
-    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
-    dotFlippersMatrix.setXshift(0);
-    dotFlippersMatrix.setTextColor(0xFF);
+    
 
     uint16_t xMinutePosition = 0;
     char buf[4];
@@ -407,6 +442,7 @@ void setup() {
     // we can reduce the deep sleep time to wake up closer to the next minute
     if (timeinfo.tm_sec > 2) compensationDelayS = 2; 
     if (timeinfo.tm_sec > 20) compensationDelayS = 7; 
+
     goToDeepSleep1m(compensationDelayS);
 }
 
