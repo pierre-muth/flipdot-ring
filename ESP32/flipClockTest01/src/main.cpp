@@ -370,6 +370,7 @@ void setup() {
     dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
     dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.setTextColor(0xFF);
+    dotFlippersMatrix.setTextWrap(false); // TODO does it solve the issue of the second minute char not printed when it is 11:59 or 23:59 ?
 
     // Check if configuration button is pressed OR configuration is not initialized
     if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
@@ -420,6 +421,7 @@ void setup() {
     }
 
     // draw a box starting or ending at 0, up to the position of the minutes, to represent the hours
+    // TODO add an offset to the box when it is ~11:59 or ~12:01
     if (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24) {
         if (xMinutePosition < displayWidth-14) {
             dotFlippersMatrix.fillRect(xMinutePosition+14, 2, displayWidth - (xMinutePosition+14), 3, 0xFF);
@@ -447,5 +449,6 @@ void setup() {
 }
 
 void loop() {
+
 
 }
