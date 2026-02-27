@@ -7,19 +7,25 @@
 #include "time.h"
 
 /*   TODO list
-- Insert a general fuse directly after BMS. Put the general switch to a small proto-board, remove connectors.
+- Insert a general fuse directly after BMS. Put the general switch to a small proto-board, remove connectors to BMS.
+- Check possibility to put PIC in sleep mode, SPI still active ? New byte wake it up ? 
+  . Not play start-up animation if woke up from sleep. 
+  
 - Use Pololu step-up/down modules for 5v and 24v
-- Test shuting down 24v step-up during deep sleep, resistor for pull-up or pull-down needed ?
-- Put a small battery on the Xiao module and test shuting down 5v step-down during sleep. Pull-up/down ? 
-- Is enough to charge the Xiao battery ?
-- Measure the main battery voltage, maybe before switching on the voltage regulators
-  . If main battery is dead, deep sleep for a long period
+- If standby current too high, test shuting down 24v step-up during deep sleep, resistor for pull-up or pull-down needed ?
+- If standby current too high, put a small battery on the Xiao module and test shuting down 5v step-down during sleep. Pull-up/down ? 
+  . If switching off 5v, how the PIC react ? 
+  . Is enough to charge the Xiao battery ?
+
+- Measure the main battery voltage with ESP32 ADC (before switching on the voltage regulators if effective)
+  . Use voltage divider ?
+  . If main battery is dead, deep sleep for a long period. Keep DC/DCs off (will need the small Xiao battery)
   . If main battery is almost dead, print a message
   . If battery is 25% refresh only every 10 min
-- Capacitive touch button ?
+- ESP32 Capacitive touch button ?
     . Is it waking up from sleep
     . If button pressed, put in hot spot setup mode, diplay address
-- Mode for demo / different clock face ?
+- Modes for demo / different clock face ?
 */
 
 // constants
@@ -468,4 +474,5 @@ void loop() {
 
 
 }
+
 
