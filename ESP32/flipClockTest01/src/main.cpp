@@ -8,8 +8,6 @@
 
 /*   TODO list
 - Insert a general fuse directly after BMS. Put the general switch to a small proto-board, remove connectors to BMS.
-- Check possibility to put PIC in sleep mode, SPI still active ? New byte wake it up ? 
-  . Not play start-up animation if woke up from sleep. 
   
 - Use Pololu step-up/down modules for 5v and 24v
 - If standby current too high, test shuting down 24v step-up during deep sleep, resistor for pull-up or pull-down needed ?
@@ -17,7 +15,7 @@
   . If switching off 5v, how the PIC react ? 
   . Is enough to charge the Xiao battery ?
 
-- Measure the main battery voltage with ESP32 ADC (before switching on the voltage regulators if effective)
+- Measure the main battery voltage with ESP32 ADC (before switching on the voltage regulators if effective?)
   . Use voltage divider ?
   . If main battery is dead, deep sleep for a long period. Keep DC/DCs off (will need the small Xiao battery)
   . If main battery is almost dead, print a message
@@ -474,5 +472,6 @@ void loop() {
 
 
 }
+
 
 
