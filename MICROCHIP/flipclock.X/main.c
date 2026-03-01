@@ -13,7 +13,7 @@
  */
 
 /*
- Â© [2025] Microchip Technology Inc. and its subsidiaries.
+© [2026] Microchip Technology Inc. and its subsidiaries.
  
  Subject to your compliance with these terms, you may use Microchip 
  software and any derivatives exclusively with Microchip products. 
@@ -119,38 +119,43 @@ const uint8_t row_reset_addr[YSIZE] = {
 uint8_t rxBuffer[XSIZE];
 uint8_t displayBuffer[XSIZE];
 uint8_t displayState[XSIZE];
-uint16_t flipping_time = 200;
+uint8_t flipping_time = 2;
 uint8_t bufferIndex = 0;
 uint8_t refreshDisplayNeeded = 0;
 uint8_t newDisplayData = 0;
 uint8_t forceFlipping = 0;
+uint8_t powerSaveingDrivers = 0;
 
-// reset a dot to black state at x, y coordinate
+void delay100us(uint8_t usx100){
+    for (uint8_t i = 0; i < usx100; i++) {
+        __delay_us(100);
+    }
+
+}
+
 void reset(uint8_t x, uint8_t y) {
     PORTB = col_set_addr[x];
     PORTA = row_set_addr[y];
     colE_SetHigh();
     rowE_SetHigh();
-    __delay_us(flipping_time);
+    delay100us(flipping_time);
     colE_SetLow();
     rowE_SetLow();
 }
 
-// set a dot to yellow state at x, y coordinate
 void set(uint8_t x, uint8_t y) {
     PORTB = col_reset_addr[x];
     PORTA = row_reset_addr[y];
     colE_SetHigh();
     rowE_SetHigh();
-    __delay_us(flipping_time);
+    delay100us(flipping_time);
     colE_SetLow();
     rowE_SetLow();
 }
-
-// Startup animation
 void animate(){
     uint8_t x, y;
-
+    
+    FP_POW_SetHigh();
     LED_SetHigh();
     
     for (y=0; y<YSIZE; y++){
@@ -187,14 +192,18 @@ void animate(){
         __delay_ms(15);
     }
     
+    FP_POW_SetLow();
     LED_SetLow();
 }
-
 // Copy rxBuffer to displayBuffer, and scan all the dots and change the state accordingly
 // and finally copy displayBuffer to displayState
 void display(void) {
+    // enable drivers
+    FP_POW_SetHigh();
     LED_SetHigh();
-    uint8_t x, y, segmentState, segment, mask, flipTimeOpt;
+    
+    uint8_t x, y, segmentState, segment, mask;
+    uint8_t flipTimeOpt = 0;
 
     // copy rxBuffer to displayBuffer
     for (x=0; x<XSIZE; x++){
@@ -208,11 +217,14 @@ void display(void) {
         if (displayBuffer[2] & 0b10000000) flipTimeOpt |= 0b00000010;
         if (displayBuffer[3] & 0b10000000) flipTimeOpt |= 0b00000100;
         if (displayBuffer[4] & 0b10000000) flipTimeOpt |= 0b00001000;
-        flipping_time = 100 * flipTimeOpt;
+        flipping_time = flipTimeOpt;
 
         // decode the 'force or skip' driving parameter
         if (displayBuffer[5] & 0b10000000) forceFlipping = 1;
         else forceFlipping = 0;
+        
+        if (displayBuffer[6] & 0b10000000) powerSaveingDrivers = 1;
+        else powerSaveingDrivers = 0;
     }
 
     // scan all the dots
@@ -249,14 +261,17 @@ void display(void) {
     newDisplayData = 0;
     refreshDisplayNeeded = 0;
     
+    // switch off driver 5V if requested
+    if (powerSaveingDrivers != 0) FP_POW_SetLow();
+    
     LED_SetLow();
 }
 
 // interrupt handler
-void __interrupt() INTERRUPT_InterruptManager (void) {
+void __interrupt() ISR (void) {
+    
     // We have an SPI interrupt
     if(PIR3bits.SSP1IF == 1) {
-     
         // put the received byte into the panelBuffer at index, it overrides the byte that has already be shifted out
         rxBuffer[bufferIndex] = SSP1BUF;
         // increment the buffer index, modulo panel size 24
@@ -264,11 +279,12 @@ void __interrupt() INTERRUPT_InterruptManager (void) {
         if (bufferIndex >= XSIZE) bufferIndex = 0;
         // put the byte from the panelBuffer at this new index into SSP1BUF, it will be shifted out at the next byte reception
         SSP1BUF = rxBuffer[bufferIndex];
-        // reset the timer
+        // enable and reset the latch timer 
         TMR0_Write(0);
-        // set the new data flag
+        PIE0bits.TMR0IE = 1;
+        // set new data incoming flag
         newDisplayData = 1;
-        // reset interrupt flag
+        // reset SPI interrupt flag
         PIR3bits.SSP1IF = 0;
     } 
 
@@ -276,43 +292,57 @@ void __interrupt() INTERRUPT_InterruptManager (void) {
     if(PIR0bits.TMR0IF == 1) {
         // reset interrupt flag
         PIR0bits.TMR0IF = 0;
-        // if new data has been received, it is time to latch
+        // if data has been received, it is time to latch
         if (newDisplayData) {
             // reset the SPI in case wrong clock/data de-sync
             SSP1CON1bits.SSPEN = 0; 
             SSP1CON1bits.SSPEN = 1;  
             // reset the buffer index
             bufferIndex = 0;       
-            // set the display refresh-needed flag. display refresh happens outside interrupt excecution.
+            // set the display refresh-needed flag. display refresh happens outside interrupt.
             refreshDisplayNeeded = 1;
         }
     } 
+    
+    // clear IOC pin interrupt flag and disable the IOC interrupt, we stay awake until full display.
+    if ( IOCCF == 1) {
+        IOCCF = 0;
+        PIE0bits.IOCIE = 0;
+        IOCCPbits.IOCCP0 = 0;
+    }
 }
+
 int main(void) {   
     // init 
     SYSTEM_Initialize();
     
-    // animation at startup
+    // animation
     animate();
-    __delay_ms(1000);
+    __delay_ms(500);
             
-    // enable SPI1 and its interrupt
+    // enable SPI1
     SPI1_Open(CLIENT_CONFIG);
     SSP1CON1bits.SSPEN = 1;
     PIE3bits.SSP1IE = 1;
     
-    // enable timer0 interrupt
-    PIE0bits.TMR0IE = 1;
-    
-    // enable global & perif interrupts
+    // enable interrupts
     INTERRUPT_GlobalInterruptEnable(); 
     INTERRUPT_PeripheralInterruptEnable(); 
     
     while(1) {
-        // If needed, launch the dot display driving 
+        
         if (refreshDisplayNeeded) {
+            // actualize the display
             display();
+            // disable timer to sleep longer, 
+            // it is re-enable at SPI reception
+            PIE0bits.TMR0IE = 0;
+            // Enable the interrupt on change on SPI clock pin
+            PIE0bits.IOCIE = 1;
+            IOCCPbits.IOCCP0 = 1;
+            // Go to sleep mode, we will sleep again after a display refresh.
+            SLEEP();
         }
+        
     }    
-
 }

@@ -1,17 +1,3 @@
-/**
- * Configuration Bits Generated Driver Header File
- * 
- * @file config_bits.h
- * 
- * @defgroup config_bitsdriver CONFIGBITS Driver 
- * 
- * @brief This file contains the API prototype for the Configuration Bits driver.
- *
- * @version Driver Version 2.0.2
- *
- * @version Package Version 1.0.5
-*/
-
 /*
 © [2026] Microchip Technology Inc. and its subsidiaries.
 
@@ -33,12 +19,4 @@
     THIS SOFTWARE.
 */
 
-#ifndef CONFIG_BITS_H
-#define	CONFIG_BITS_H
-
-#include "../system/clock.h"
-
-#endif /* CONFIG_BITS_H */
-/**
- End of File
-*/
+void POWER_Initialize(void);

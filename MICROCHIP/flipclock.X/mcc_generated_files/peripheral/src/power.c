@@ -1,17 +1,3 @@
-/**
- * Configuration Bits Generated Driver Header File
- * 
- * @file config_bits.h
- * 
- * @defgroup config_bitsdriver CONFIGBITS Driver 
- * 
- * @brief This file contains the API prototype for the Configuration Bits driver.
- *
- * @version Driver Version 2.0.2
- *
- * @version Package Version 1.0.5
-*/
-
 /*
 © [2026] Microchip Technology Inc. and its subsidiaries.
 
@@ -33,12 +19,13 @@
     THIS SOFTWARE.
 */
 
-#ifndef CONFIG_BITS_H
-#define	CONFIG_BITS_H
+#include <xc.h>
+#include "../power.h"
 
-#include "../system/clock.h"
-
-#endif /* CONFIG_BITS_H */
-/**
- End of File
-*/
+// Set the POWER module to the options selected in the user interface.
+void POWER_Initialize(void) {
+    // VREGPM High Power mode; 
+    VREGCON = 0x0;
+    // IDLEN Sleep mode; DOZEN Normal mode; ROI Entering ISR does not change DOZEN; DOE Exiting ISR does not change DOZEN; DOZE 1:2; 
+    CPUDOZE = 0x0;
+}
