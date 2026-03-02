@@ -2,6 +2,7 @@
 #include <WiFi.h>
 #include <WebServer.h>
 #include <Preferences.h>
+#include <sys/time.h>
 #include "Adafruit_GFX.h"
 #include "DotFlippersMatrix.h"
 #include "time.h"
@@ -144,6 +145,28 @@ const char htmlPage[] PROGMEM = R"rawliteral(
             
             <button type="submit">Save Configuration</button>
         </form>
+
+        <form action="/settime" method="POST">
+            <h2>🕒 Manual Time Setup</h2>
+            <div class="help">Use this if WiFi/NTP is unavailable. This sets the ESP32 RTC time directly.</div>
+
+            <label>Hour (0-23):</label>
+            <input type="number" name="setHour" value="12" min="0" max="23" required>
+
+            <label>Minute (0-59):</label>
+            <input type="number" name="setMinute" value="0" min="0" max="59" required>
+
+            <label>Day (1-31):</label>
+            <input type="number" name="setDay" value="1" min="1" max="31" required>
+
+            <label>Month (1-12):</label>
+            <input type="number" name="setMonth" value="1" min="1" max="12" required>
+
+            <label>Year (e.g. 2026):</label>
+            <input type="number" name="setYear" value="2026" min="2000" max="2099" required>
+
+            <button type="submit">Set Time</button>
+        </form>
     </div>
 </body>
 </html>
@@ -233,6 +256,62 @@ void handleSave() {
     }
 }
 
+void handleSetTime() {
+    if (!server.hasArg("setHour") || !server.hasArg("setMinute") || !server.hasArg("setDay") || !server.hasArg("setMonth") || !server.hasArg("setYear")) {
+        server.send(400, "text/plain", "Missing date/time parameters");
+        return;
+    }
+
+    int setHour = server.arg("setHour").toInt();
+    int setMinute = server.arg("setMinute").toInt();
+    int setDay = server.arg("setDay").toInt();
+    int setMonth = server.arg("setMonth").toInt();
+    int setYear = server.arg("setYear").toInt();
+
+    if (setHour < 0 || setHour > 23 || setMinute < 0 || setMinute > 59 || setDay < 1 || setDay > 31 || setMonth < 1 || setMonth > 12 || setYear < 2000 || setYear > 2099) {
+        server.send(400, "text/plain", "Invalid date/time values");
+        return;
+    }
+
+    setenv("TZ", config.timezone, 1);
+    tzset();
+
+    struct tm newTime = {};
+    newTime.tm_year = setYear - 1900;
+    newTime.tm_mon = setMonth - 1;
+    newTime.tm_mday = setDay;
+    newTime.tm_hour = setHour;
+    newTime.tm_min = setMinute;
+    newTime.tm_sec = 0;
+
+    time_t epoch = mktime(&newTime);
+    if (epoch == (time_t)-1) {
+        server.send(400, "text/plain", "Failed to build time from provided values");
+        return;
+    }
+
+    struct timeval tv = { .tv_sec = epoch, .tv_usec = 0 };
+    if (settimeofday(&tv, nullptr) != 0) {
+        server.send(500, "text/plain", "Failed to set RTC time");
+        return;
+    }
+
+    struct tm verifyTime;
+    getLocalTime(&verifyTime);
+    hourOfLastSinceSync = verifyTime.tm_hour;
+
+    String response = "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial;text-align:center;padding:50px;background:#f0f0f0;}";
+    response += ".message{background:white;padding:30px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);max-width:500px;margin:0 auto;}";
+    response += "h1{color:#4CAF50;}a{display:inline-block;margin-top:15px;color:#2196F3;text-decoration:none;}</style></head><body><div class='message'><h1>✓ Time Set</h1>";
+    response += "<p>RTC updated to: " + String(setYear) + "-" + String(setMonth) + "-" + String(setDay) + " " + String(setHour) + ":" + String(setMinute) + "</p>";
+    response += "<a href='/'>Back to configuration</a></div></body></html>";
+
+    server.send(200, "text/html", response);
+
+    delay(3000);
+    ESP.restart();
+}
+
 // Start configuration mode (Access Point + Web Server)
 void startConfigMode() {
     Serial.println("Starting configuration mode...");
@@ -257,6 +336,7 @@ void startConfigMode() {
     // Initialize web server
     server.on("/", handleRoot);
     server.on("/save", HTTP_POST, handleSave);
+    server.on("/settime", HTTP_POST, handleSetTime);
     server.begin();
     
     Serial.println("Web server started");
@@ -314,9 +394,9 @@ void connectWiFi() {
         return;
     }
     
-    // Wait for connection with a timeout of 10 seconds
+    // Wait for connection with a timeout of 5 seconds
     unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - start) < 10000) {
+    while (WiFi.status() != WL_CONNECTED && (millis() - start) < 5000) {
         delay(500);
     }
     
@@ -370,7 +450,7 @@ void setup() {
     dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
     dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.setTextWrap(false); // TODO does it solve the issue of the second minute char not printed when it is 11:59 or 23:59 ?
+    dotFlippersMatrix.setTextWrap(false); // does it solve the issue of the second minute char not printed when it is 11:59 or 23:59 ?
 
     // Check if configuration button is pressed OR configuration is not initialized
     if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
@@ -379,6 +459,7 @@ void setup() {
         } else {
             Serial.println("No WiFi configuration found - entering setup mode");
         }
+
         startConfigMode();
         // startConfigMode() runs forever, so we never reach here
     }
@@ -398,13 +479,14 @@ void setup() {
         if (getLocalTime(&timeinfo))  hourOfLastSinceSync = timeinfo.tm_hour;
         else Serial.println("Failed to obtain time.");
     } else {
-        Serial.println("Time is already synced less than an hour ago, no need to connect to WiFi.");
+        Serial.println("Time already synced less than an hour ago, no need to connect to WiFi.");
     }
     
-    
-
+    // Compute the image to display on the flipdot based on the current time
     uint16_t xMinutePosition = 0;
     char buf[4];
+    uint16_t xBox = 0;
+    uint16_t boxWidth = 0;
 
     // minutes in a char array
     sniprintf(buf, 4, "%02d", timeinfo.tm_min);
@@ -421,16 +503,23 @@ void setup() {
     }
 
     // draw a box starting or ending at 0, up to the position of the minutes, to represent the hours
-    // TODO add an offset to the box when it is ~11:59 or ~12:01
-    if (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24) {
-        if (xMinutePosition < displayWidth-14) {
-            dotFlippersMatrix.fillRect(xMinutePosition+14, 2, displayWidth - (xMinutePosition+14), 3, 0xFF);
+    if (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24) { // box following the digits
+        if (xMinutePosition < displayWidth-14) { // only if there is space to draw the box
+            xBox = xMinutePosition+14;
+            boxWidth = displayWidth - (xMinutePosition+14);
         }
-    } else {
-        if (xMinutePosition > 3) {
-            dotFlippersMatrix.fillRect(0, 2, xMinutePosition-3, 3, 0xFF);
+    } else { // box preceding the digits
+        if (xMinutePosition > 3 && xMinutePosition < displayWidth-17) { 
+            xBox = 0;
+            boxWidth = xMinutePosition-3;
+        } else if (xMinutePosition >= displayWidth-17) {
+            // add an offset to the start of the box when time is arount 11:55
+            // to avoid the last minute digit to touch the start of the box (circular display).
+            xBox = 3-(displayWidth-(xMinutePosition+11));
+            boxWidth = displayWidth-14-xBox;
         }
     }
+    dotFlippersMatrix.fillRect(xBox, 2, boxWidth, 3, 0xFF);
 
     // refresh flipdot display
     dotFlippersMatrix.display();
@@ -442,7 +531,7 @@ void setup() {
 
     int compensationDelayS = 0;
     // we can reduce the deep sleep time to wake up closer to the next minute
-    if (timeinfo.tm_sec > 2) compensationDelayS = 2; 
+    if (timeinfo.tm_sec > 3) compensationDelayS = 2; 
     if (timeinfo.tm_sec > 20) compensationDelayS = 7; 
 
     goToDeepSleep1m(compensationDelayS);
@@ -452,7 +541,6 @@ void loop() {
 
 
 }
-
 
 
 
