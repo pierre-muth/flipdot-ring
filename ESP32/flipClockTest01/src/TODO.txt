@@ -1,0 +1,24 @@
+/*   TODO list
+
+> Electronic
+  - Insert a general fuse directly after BMS. Put the general switch to a small proto-board, remove connectors to BMS.
+  - Use Pololu step-up/down modules for 5v and 24v
+  - If standby current too high, test shuting down 24v step-up during deep sleep, resistor for pull-up or pull-down needed ?
+  - If standby current too high, put a small battery on the Xiao module and test shuting down 5v step-down during sleep. Pull-up/down ? 
+    . If switching off 5v, how the PIC react ? 
+    . Is enough to charge the Xiao battery ?
+
+> PIC code
+  - PIC: use the FP power configuration bit to manage the SLEEP mode. Prevent sleep might be useful for Demo animations
+
+> ESP32 code
+  - Measure the main battery voltage with ESP32 ADC (before switching on the voltage regulators, if effective?)
+    . Use voltage divider ?
+    . If main battery is dead, deep sleep for a long period. Keep DC/DCs off (will need the small Xiao battery)
+    . If main battery is almost dead, print a message
+    . If battery is 25% refresh only every 10 min
+  - ESP32 Capacitive touch button ?
+      . Is it waking up from sleep
+      . If button pressed, put in hot spot setup mode, diplay address
+  - Modes for demo / different clock face ?
+*/
