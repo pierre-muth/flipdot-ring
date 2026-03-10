@@ -6,6 +6,7 @@
 #include "Adafruit_GFX.h"
 #include "DotFlippersMatrix.h"
 #include "time.h"
+#include "config_page.h"
 
 // constants
 const char* ntpServer = "pool.ntp.org";
@@ -35,7 +36,7 @@ Preferences preferences;
 Config config;
 WebServer server(80);
 
-// Load configuration from preferences
+// Load configuration from preferences (or set defaults if not found)
 void loadConfig() {
     preferences.begin("clock-config", true); // read-only
     config.initialized = preferences.getBool("initialized", false);
@@ -79,98 +80,6 @@ void saveConfig() {
     config.initialized = true;
     Serial.println("Configuration saved to storage");
 }
-
-// HTML configuration page
-const char htmlPage[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Clock Configuration</title>
-    <style>
-        body { font-family: Arial; margin: 20px; background: #f0f0f0; }
-        .container { max-width: 500px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1 { color: #333; text-align: center; }
-        h2 { color: #555; font-size: 18px; margin-top: 25px; border-bottom: 2px solid #4CAF50; padding-bottom: 5px; }
-        label { display: block; margin-top: 15px; font-weight: bold; color: #555; }
-        input[type="text"], input[type="password"], input[type="number"] { width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        .checkbox-group { margin-top: 15px; }
-        .checkbox-group label { display: inline-block; font-weight: normal; margin-left: 8px; }
-        .checkbox-group input[type="checkbox"] { width: auto; }
-        button { width: 100%; padding: 12px; margin-top: 20px; background: #4CAF50; color: white; border: none; border-radius: 4px; font-size: 16px; cursor: pointer; }
-        button:hover { background: #45a049; }
-        .info { background: #e7f3fe; padding: 10px; border-left: 4px solid #2196F3; margin-bottom: 20px; font-size: 14px; }
-        .help { font-size: 12px; color: #888; margin-top: 3px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>⏰ Flip Clock Configuration</h1>
-        <div class="info">Configure your WiFi, timezone, and flipdot display settings.</div>
-        <form action="/save" method="POST">
-            <h2>📡 WiFi Settings</h2>
-            <label>WiFi SSID:</label>
-            <input type="text" name="ssid" required placeholder="Enter WiFi network name">
-            
-            <label>WiFi Password:</label>
-            <input type="password" name="password" placeholder="Enter WiFi password">
-            
-            <label>Timezone (POSIX format):</label>
-            <input type="text" name="timezone" value="CET-1CEST,M3.5.0/2,M10.5.0/3" placeholder="e.g., CET-1CEST,M3.5.0/2,M10.5.0/3">
-            <div class="help">Examples: CET-1CEST,M3.5.0/2,M10.5.0/3 (Europe Paris) | PST8PDT,M3.2.0,M11.1.0 (US Pacific)</div>
-            
-            <h2>🔢 Flipdot Display Settings</h2>
-            <div class="checkbox-group">
-                <input type="checkbox" id="customConfig" name="customConfig" value="1" checked>
-                <label for="customConfig">Custom Configuration</label>
-            </div>
-            <div class="help">Enable custom display configuration</div>
-            
-            <div class="checkbox-group">
-                <input type="checkbox" id="forceFlip" name="forceFlip" value="1" checked>
-                <label for="forceFlip">Force Flipping</label>
-            </div>
-            <div class="help">Force dots flipping even if no change</div>
-            
-            <div class="checkbox-group">
-                <input type="checkbox" id="driversPowerSave" name="driversPowerSave" value="1" checked>
-                <label for="driversPowerSave">Drivers Power Saving</label>
-            </div>
-            <div class="help">Switching drivers 5V off between display refreshes</div>
-            
-            <label>Dot Flip Time (in 100s of us):</label>
-            <input type="number" name="dotFlipTime" value="4" min="1" max="15" placeholder="4">
-            <div class="help">Time in 100s of microseconds for each dot to flip (1-15, default: 4)</div>
-            
-            <button type="submit">Save Configuration</button>
-        </form>
-
-        <form action="/settime" method="POST">
-            <h2>🕒 Manual Time Setup</h2>
-            <div class="help">Use this if WiFi/NTP is unavailable. This sets the ESP32 RTC time directly.</div>
-
-            <label>Hour (0-23):</label>
-            <input type="number" name="setHour" value="12" min="0" max="23" required>
-
-            <label>Minute (0-59):</label>
-            <input type="number" name="setMinute" value="0" min="0" max="59" required>
-
-            <label>Day (1-31):</label>
-            <input type="number" name="setDay" value="1" min="1" max="31" required>
-
-            <label>Month (1-12):</label>
-            <input type="number" name="setMonth" value="1" min="1" max="12" required>
-
-            <label>Year (e.g. 2026):</label>
-            <input type="number" name="setYear" value="2026" min="2000" max="2099" required>
-
-            <button type="submit">Set Time</button>
-        </form>
-    </div>
-</body>
-</html>
-)rawliteral";
 
 String escapeHtml(const char *input) {
     String out;
@@ -452,62 +361,10 @@ void print_wakeup_reason(){
   }
 }
 
-void setup() {
-    // Setup configuration pin
-    pinMode(CONFIG_PIN, INPUT_PULLUP);
-    pinMode(LED_BUILTIN, OUTPUT);
-    digitalWrite(LED_BUILTIN, LOW); // turn on built-in LED to indicate the device is awake
+// Compute the image to display on the flipdot based on the current time
+// minute digits at hour position.
+void display_time() {
 
-    // initialize serial, it is native USB serial, it will only work if a PC is connected.
-    Serial.begin(115200);
-
-    print_wakeup_reason();
-
-    // load configuration from storage (or set defaults if not found)
-    loadConfig();
-    
-    // initialize flipdot display
-    dotFlippersMatrix.begin();
-    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
-    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
-    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
-    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
-    dotFlippersMatrix.setXshift(0);
-    dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.setTextWrap(false); // does it solve the issue of the second minute char not printed when it is 11:59 or 23:59 ?
-
-    // Check if configuration button is pressed OR configuration is not initialized
-    if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
-        if (digitalRead(CONFIG_PIN) == LOW) {
-            Serial.println("Configuration button pressed - entering setup mode");
-        } else {
-            Serial.println("No WiFi configuration found - entering setup mode");
-        }
-
-        startConfigMode();
-        // startConfigMode() runs forever, so we never reach here
-    }
-
-    // get time from RTC
-    configTimeZone(); // configure timezone otherwise we may get wrong time from RTC which is not in UTC
-    if (!getLocalTime(&timeinfo)) {
-        Serial.println("Failed to obtain time 1");
-    }
-
-    Serial.println("Previous wifi sync hour: " + String(hourOfLastSinceSync));
-    // check if we need to sync time with NTP server (we do it once per hour to save battery)
-    if (hourOfLastSinceSync == -1 || hourOfLastSinceSync != timeinfo.tm_hour) {
-        Serial.println("Connect to Wifi and sync time with NTP server. ");
-        connectWiFi();
-        delay(1000);
-        configTimeZone();
-        if (getLocalTime(&timeinfo))  hourOfLastSinceSync = timeinfo.tm_hour;
-        else Serial.println("Failed to obtain time 2");
-    } else {
-        Serial.println("Time already synced less than an hour ago, no need to connect to WiFi.");
-    }
-    
-    // Compute the image to display on the flipdot based on the current time
     uint16_t xMinutePosition = 0;
     char buf[4];
     uint16_t xBox = 0;
@@ -549,17 +406,84 @@ void setup() {
     // refresh flipdot display
     dotFlippersMatrix.display();
 
+}
+
+// we start here.
+void setup() {
+    // Setup the configuration pin
+    pinMode(CONFIG_PIN, INPUT_PULLUP);
+    
+    //setup built-in LED pin as output
+    pinMode(LED_BUILTIN, OUTPUT);
+    // turn ON built-in LED to indicate the device is awake
+    digitalWrite(LED_BUILTIN, LOW); 
+
+    // initialize serial, it is native USB serial so it will only work if a PC is connected.
+    Serial.begin(115200);
+
+    print_wakeup_reason();
+    loadConfig();
+    
+    // initialize flipdot display
+    dotFlippersMatrix.begin();
+    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
+    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
+    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
+    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
+    dotFlippersMatrix.setXshift(0);
+    dotFlippersMatrix.setTextColor(0xFF);
+    dotFlippersMatrix.setTextWrap(false); // does it solve the issue of the second minute char not printed when it is 11:59 or 23:59 ?
+
+    // Check if configuration button is pressed OR configuration is not initialized
+    if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
+        if (digitalRead(CONFIG_PIN) == LOW) {
+            Serial.println("Configuration button pressed - entering setup mode");
+        } else {
+            Serial.println("No WiFi configuration found - entering setup mode");
+        }
+
+        startConfigMode();
+        // startConfigMode() runs forever, so we never reach here
+    }
+
+    // configure timezone otherwise we may get wrong time from RTC which is not in UTC
+    configTimeZone(); 
+    // get time from RTC
+    if (!getLocalTime(&timeinfo)) {
+        Serial.println("Failed to obtain time 1");
+    }
+
+    Serial.println("Previous wifi sync hour: " + String(hourOfLastSinceSync));
+
+    // check if we need to sync time with NTP server (we do it once per hour to save battery)
+    if (hourOfLastSinceSync == -1 || hourOfLastSinceSync != timeinfo.tm_hour) {
+        Serial.println("Connect to Wifi and sync time with NTP server. ");
+        connectWiFi();
+        delay(1000);
+        configTimeZone();
+        if (getLocalTime(&timeinfo))  hourOfLastSinceSync = timeinfo.tm_hour;
+        else Serial.println("Failed to obtain time 2");
+    } else {
+        Serial.println("Time already synced less than an hour ago, no need to connect to WiFi.");
+    }
+    
+    // compute and display the time on the flipdot
+    display_time();
+
     Serial.println(&timeinfo, "%A %d %B %Y %H:%M:%S");
     Serial.println("Previous wifi sync hour: " + String(hourOfLastSinceSync));
 
     disableWiFi();
 
-    int compensationDelayS = 0;
     // we can reduce the deep sleep time to wake up closer to the next minute
+    int compensationDelayS = 0;
     if (timeinfo.tm_sec > 3) compensationDelayS = 2; 
-    if (timeinfo.tm_sec > 30) compensationDelayS = 9; 
+    if (timeinfo.tm_sec > 25) compensationDelayS = 9; 
 
-    digitalWrite(LED_BUILTIN, HIGH); // turn off built-in LED to indicate the device is going to sleep
+    // turn off built-in LED to indicate the device is going to sleep
+    digitalWrite(LED_BUILTIN, HIGH); 
+
+    // go to deep sleep until the next minute (minus the compensation delay)
     goToDeepSleep1m(compensationDelayS);
 }
 
