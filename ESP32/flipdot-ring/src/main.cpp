@@ -385,7 +385,7 @@ void display_time() {
     }
 
     // draw a box starting or ending at 0, up to the position of the minutes, to represent the hours
-    if (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24) { // box following the digits
+    if ( !(timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24)) { // box following the digits
         if (xMinutePosition < displayWidth-14) { // only if there is space to draw the box
             xBox = xMinutePosition+14;
             boxWidth = displayWidth - (xMinutePosition+14);
@@ -401,6 +401,7 @@ void display_time() {
             boxWidth = displayWidth-14-xBox;
         }
     }
+
     dotFlippersMatrix.fillRect(xBox, 2, boxWidth, 3, 0xFF);
 
     // refresh flipdot display

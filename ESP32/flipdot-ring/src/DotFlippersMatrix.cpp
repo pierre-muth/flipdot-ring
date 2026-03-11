@@ -121,6 +121,12 @@ void DotFlippersMatrix::display() {
         if (driversPowerSaving) {
             flipdotBuffer[(i*24)+17] |= 0x80; // set the drivers power saving bit for i panel
         }
+
+        // control byte is 0xAA
+        flipdotBuffer[(i*24)+6] |= 0x80; 
+        flipdotBuffer[(i*24)+4] |= 0x80; 
+        flipdotBuffer[(i*24)+2] |= 0x80; 
+        flipdotBuffer[(i*24)+0] |= 0x80; 
     }
     
     // transmit
