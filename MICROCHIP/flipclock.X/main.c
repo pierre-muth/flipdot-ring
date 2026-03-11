@@ -124,7 +124,7 @@ uint8_t bufferIndex = 0;
 uint8_t refreshDisplayNeeded = 0;
 uint8_t newDisplayData = 0;
 uint8_t forceFlipping = 0;
-uint8_t powerSaveingDrivers = 0;
+uint8_t powerSavingDrivers = 0;
 
 void delay100us(uint8_t usx100){
     for (uint8_t i = 0; i < usx100; i++) {
@@ -195,6 +195,7 @@ void animate(){
     FP_POW_SetLow();
     LED_SetLow();
 }
+
 // Copy rxBuffer to displayBuffer, and scan all the dots and change the state accordingly
 // and finally copy displayBuffer to displayState
 void display(void) {
@@ -204,6 +205,7 @@ void display(void) {
     
     uint8_t x, y, segmentState, segment, mask;
     uint8_t flipTimeOpt = 0;
+    uint8_t checkByte = 0;
 
     // copy rxBuffer to displayBuffer
     for (x=0; x<XSIZE; x++){
@@ -223,46 +225,64 @@ void display(void) {
         if (displayBuffer[5] & 0b10000000) forceFlipping = 1;
         else forceFlipping = 0;
         
-        if (displayBuffer[6] & 0b10000000) powerSaveingDrivers = 1;
-        else powerSaveingDrivers = 0;
+        // decode the power saving parameter
+        if (displayBuffer[6] & 0b10000000) powerSavingDrivers = 1;
+        else powerSavingDrivers = 0;
     }
-
-    // scan all the dots
-    for (y=0; y<YSIZE; y++){
-        mask = 0b1 << y;
-        for (x=0; x<XSIZE; x++){
-            segment = displayBuffer[x];
-            segmentState = displayState[x];
-
-            // if we are not forcing the dot flipping.
-            if (!forceFlipping) {
-                // then if there is no state change then we skip the driving.
-                if ((mask & segment) == (mask & segmentState)) {
-                    continue;
+    
+    // decode check byte
+    if (displayBuffer[16] & 0b10000000) checkByte |= 0b00000001;
+    if (displayBuffer[17] & 0b10000000) checkByte |= 0b00000010;
+    if (displayBuffer[18] & 0b10000000) checkByte |= 0b00000100;
+    if (displayBuffer[19] & 0b10000000) checkByte |= 0b00001000;
+    if (displayBuffer[20] & 0b10000000) checkByte |= 0b00010000;
+    if (displayBuffer[21] & 0b10000000) checkByte |= 0b00100000;
+    if (displayBuffer[22] & 0b10000000) checkByte |= 0b01000000;
+    if (displayBuffer[23] & 0b10000000) checkByte |= 0b10000000;
+    
+    // are those data valid ?
+    if (checkByte == 0xAA && bufferIndex == 0) { // and bufferIndex == 0 ?
+        
+        // scan all the dots
+        for (y=0; y<YSIZE; y++){
+            mask = 0b1 << y;
+            for (x=0; x<XSIZE; x++){
+                segment = displayBuffer[x];
+                segmentState = displayState[x];
+                
+                // if we are not forcing the dot flipping.
+                if (!forceFlipping) {
+                    // then if there is no state change then we skip the driving.
+                    if ((mask & segment) == (mask & segmentState)) {
+                        continue;
+                    }
                 }
-            }
 
-            // Drive the flipping.
-            if ( (mask & segment) > 0){
-                set(x,y);
-            } else {
-                reset(x,y);
+                // Drive the flipping.
+                if ( (mask & segment) > 0){
+                    set(x,y);
+                } else {
+                    reset(x,y);
+                }
+                
             }
-            
         }
-    }
 
-    // copy displayBuffer to displayState
-    for (x=0; x<XSIZE; x++){
-        displayState[x] = displayBuffer[x];
+        // copy displayBuffer to displayState
+        for (x=0; x<XSIZE; x++){
+            displayState[x] = displayBuffer[x];
+        }
     }
 
     // reset status flags
     newDisplayData = 0;
     refreshDisplayNeeded = 0;
     
+    // reset the buffer index
+    bufferIndex = 0;       
+    
     // switch off driver 5V if requested
-    if (powerSaveingDrivers != 0) FP_POW_SetLow();
+    if (powerSavingDrivers != 0) FP_POW_SetLow();
     
     LED_SetLow();
 }
@@ -279,9 +299,8 @@ void __interrupt() ISR (void) {
         if (bufferIndex >= XSIZE) bufferIndex = 0;
         // put the byte from the panelBuffer at this new index into SSP1BUF, it will be shifted out at the next byte reception
         SSP1BUF = rxBuffer[bufferIndex];
-        // enable and reset the latch timer 
+        // reset the latch timer 
         TMR0_Write(0);
-        PIE0bits.TMR0IE = 1;
         // set new data incoming flag
         newDisplayData = 1;
         // reset SPI interrupt flag
@@ -292,23 +311,30 @@ void __interrupt() ISR (void) {
     if(PIR0bits.TMR0IF == 1) {
         // reset interrupt flag
         PIR0bits.TMR0IF = 0;
-        // if data has been received, it is time to latch
+        
+        // reset the SPI in case wrong clock/data de-sync
+        SSP1CON1bits.SSPEN = 0; 
+        SSP1CON1bits.SSPEN = 1;  
+        
+        // if data has been received, it is time to display
         if (newDisplayData) {
-            // reset the SPI in case wrong clock/data de-sync
-            SSP1CON1bits.SSPEN = 0; 
-            SSP1CON1bits.SSPEN = 1;  
-            // reset the buffer index
-            bufferIndex = 0;       
             // set the display refresh-needed flag. display refresh happens outside interrupt.
             refreshDisplayNeeded = 1;
         }
     } 
     
-    // clear IOC pin interrupt flag and disable the IOC interrupt, we stay awake until full display.
+    // CLK Pin interrupt
     if ( IOCCF == 1) {
+        // clear IOC pin interrupt flag 
         IOCCF = 0;
+        
+        // disable the IOC interrupt, we stay awake until full display.
         PIE0bits.IOCIE = 0;
         IOCCPbits.IOCCP0 = 0;
+        
+        // enable and reset latch timer
+        TMR0_Write(0);
+        PIE0bits.TMR0IE = 1;
     }
 }
 
@@ -334,14 +360,18 @@ int main(void) {
         if (refreshDisplayNeeded) {
             // actualize the display
             display();
-            // disable timer to sleep longer, 
-            // it is re-enable at SPI reception
+            
+            // disable timer, it is re-enable at IOC
             PIE0bits.TMR0IE = 0;
+            
             // Enable the interrupt on change on SPI clock pin
             PIE0bits.IOCIE = 1;
             IOCCPbits.IOCCP0 = 1;
-            // Go to sleep mode, we will sleep again after a display refresh.
-            SLEEP();
+            
+            if (powerSavingDrivers != 0) {
+                // Go to sleep mode, we will sleep again after a display refresh.
+                SLEEP();
+            }
         }
         
     }    
