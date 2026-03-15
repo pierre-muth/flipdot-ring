@@ -7,15 +7,19 @@
 #include "DotFlippersMatrix.h"
 #include "time.h"
 #include "config_page.h"
+#include "driver/rtc_io.h"
 
 // constants
 const char* ntpServer = "pool.ntp.org";
 static const char* PARIS_TZ = "CET-1CEST,M3.5.0/2,M10.5.0/3";
-RTC_DATA_ATTR static int hourOfLastSinceSync = -1;
+RTC_DATA_ATTR static int dayOfLastSinceSync = -1;
 
 const uint16_t displayWidth = 288;
 const uint16_t displayHeight = 7;
-const int CONFIG_PIN = D5; // GPIO pin to enter configuration mode on boot
+const int CONFIG_PIN = D0; // GPIO pin to enter configuration mode 
+const gpio_num_t CONFIG_GPIO = GPIO_NUM_0;
+const int BATTERY_PIN = A1; // ADC pin for battery voltage measurement
+const int LOW_BATTERY_THRESHOLD = 1650; // in millivolts
 
 // Configuration structure
 struct Config {
@@ -207,7 +211,7 @@ void handleSetTime() {
 
     struct tm verifyTime;
     getLocalTime(&verifyTime);
-    hourOfLastSinceSync = verifyTime.tm_hour;
+    dayOfLastSinceSync = verifyTime.tm_mday;
 
     String response = "<!DOCTYPE html><html><head><meta charset='UTF-8'><style>body{font-family:Arial;text-align:center;padding:50px;background:#f0f0f0;}";
     response += ".message{background:white;padding:30px;border-radius:8px;box-shadow:0 2px 4px rgba(0,0,0,0.1);max-width:500px;margin:0 auto;}";
@@ -326,7 +330,7 @@ void disableWiFi() {
 }
 
 // go into deep sleep for 1 minute minus negativeDelayS seconds
-void goToDeepSleep1m(int negativeDelayS = 0) {
+void goToDeepSleep1min(int negativeDelayS = 0) {
     Serial.print("Going to deep sleep for ");
     Serial.print(60 - negativeDelayS);
     Serial.println(" seconds");
@@ -335,6 +339,16 @@ void goToDeepSleep1m(int negativeDelayS = 0) {
     delay(100);
     esp_sleep_enable_timer_wakeup((60 - negativeDelayS) * 1000000ULL);
     // esp_sleep_enable_timer_wakeup(10 * 1000000ULL);
+    esp_deep_sleep_start();
+}
+
+// go into deep sleep for 10 minute
+void goToDeepSleep10min() {
+    Serial.println("Going to deep sleep for 10min ");
+    Serial.flush(); 
+    Serial.end();
+    delay(100);
+    esp_sleep_enable_timer_wakeup(600 * 1000000ULL);
     esp_deep_sleep_start();
 }
 
@@ -385,7 +399,7 @@ void display_time() {
     }
 
     // draw a box starting or ending at 0, up to the position of the minutes, to represent the hours
-    if ( !(timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24)) { // box following the digits
+    if ( (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24)) { // box following the digits
         if (xMinutePosition < displayWidth-14) { // only if there is space to draw the box
             xBox = xMinutePosition+14;
             boxWidth = displayWidth - (xMinutePosition+14);
@@ -412,17 +426,32 @@ void display_time() {
 // we start here.
 void setup() {
     // Setup the configuration pin
-    pinMode(CONFIG_PIN, INPUT_PULLUP);
-    
+    pinMode(CONFIG_GPIO, INPUT_PULLUP);
+    // enable wake up from the configuration pin (active HIGH)
+    rtc_gpio_init(CONFIG_GPIO); // needed for the pin to work as wakeup source
+    rtc_gpio_set_direction(CONFIG_GPIO, RTC_GPIO_MODE_INPUT_ONLY);
+    rtc_gpio_pulldown_dis(CONFIG_GPIO); // disable pull-down resistor for the config pin
+    rtc_gpio_pullup_en(CONFIG_GPIO); // enable pull-up resistor for the config pin
+    esp_sleep_enable_ext1_wakeup(1ULL << CONFIG_GPIO, ESP_EXT1_WAKEUP_ANY_LOW);
+
     //setup built-in LED pin as output
     pinMode(LED_BUILTIN, OUTPUT);
     // turn ON built-in LED to indicate the device is awake
     digitalWrite(LED_BUILTIN, LOW); 
-
+    
     // initialize serial, it is native USB serial so it will only work if a PC is connected.
     Serial.begin(115200);
+    
+    // ADC: Set the resolution to 12 bits (0-4095)
+    analogReadResolution(12);
+    int mainBatteryMiliVolts = analogReadMilliVolts(BATTERY_PIN);
+    Serial.print("Battery voltage (mV): ");
+    Serial.println(mainBatteryMiliVolts);
 
+    // print waking up reason 
     print_wakeup_reason();
+    
+    // Load configuration from storage
     loadConfig();
     
     // initialize flipdot display
@@ -433,7 +462,7 @@ void setup() {
     dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
     dotFlippersMatrix.setXshift(0);
     dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.setTextWrap(false); // does it solve the issue of the second minute char not printed when it is 11:59 or 23:59 ?
+    dotFlippersMatrix.setTextWrap(false);  
 
     // Check if configuration button is pressed OR configuration is not initialized
     if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
@@ -454,25 +483,25 @@ void setup() {
         Serial.println("Failed to obtain time 1");
     }
 
-    Serial.println("Previous wifi sync hour: " + String(hourOfLastSinceSync));
+    Serial.println("Previous wifi sync day: " + String(dayOfLastSinceSync));
 
-    // check if we need to sync time with NTP server (we do it once per hour to save battery)
-    if (hourOfLastSinceSync == -1 || hourOfLastSinceSync != timeinfo.tm_hour) {
+    // check if we need to sync time with NTP server (we do it once a day at 12 to save battery)
+    if (dayOfLastSinceSync == -1 || (timeinfo.tm_hour == 12 && timeinfo.tm_mday != dayOfLastSinceSync)) {
         Serial.println("Connect to Wifi and sync time with NTP server. ");
         connectWiFi();
         delay(1000);
         configTimeZone();
-        if (getLocalTime(&timeinfo))  hourOfLastSinceSync = timeinfo.tm_hour;
+        if (getLocalTime(&timeinfo))  dayOfLastSinceSync = timeinfo.tm_mday;
         else Serial.println("Failed to obtain time 2");
     } else {
-        Serial.println("Time already synced less than an hour ago, no need to connect to WiFi.");
+        Serial.println("Time already synced today, no need to connect to WiFi.");
     }
     
     // compute and display the time on the flipdot
     display_time();
 
     Serial.println(&timeinfo, "%A %d %B %Y %H:%M:%S");
-    Serial.println("Previous wifi sync hour: " + String(hourOfLastSinceSync));
+    Serial.println("Previous wifi sync day: " + String(dayOfLastSinceSync));
 
     disableWiFi();
 
@@ -485,12 +514,26 @@ void setup() {
     digitalWrite(LED_BUILTIN, HIGH); 
 
     // go to deep sleep until the next minute (minus the compensation delay)
-    goToDeepSleep1m(compensationDelayS);
-}
+    // if Serial is not null, it means a PC is connected, so we stay awake for debugging purposes
+    if (!Serial)  {
+        if (mainBatteryMiliVolts < LOW_BATTERY_THRESHOLD) {
+            dotFlippersMatrix.clear(0);
+            dotFlippersMatrix.display(); 
+            dotFlippersMatrix.setCursor(0, 0);
+            dotFlippersMatrix.print("Low battery: " + String(mainBatteryMiliVolts) + "mV");
+            dotFlippersMatrix.display();
+            goToDeepSleep10min();
+        } else if (timeinfo.tm_hour > 22 || timeinfo.tm_hour < 6) {
+            goToDeepSleep10min();
+        } else {
+            goToDeepSleep1min(compensationDelayS);
+        }
 
+    }
+}
 void loop() {
-    Serial.println("Error: loop() should never be called because we go to deep sleep at the end of setup()");
-    delay(20000);
+    Serial.println("In loop. restarting in 30 seconds...");
+    delay(30000);
     ESP.restart();
 }
 
