@@ -3,6 +3,7 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <sys/time.h>
+#include <math.h>
 #include "Adafruit_GFX.h"
 #include "DotFlippersMatrix.h"
 #include "time.h"
@@ -227,7 +228,7 @@ void handleSetTime() {
 
 // Start configuration mode (Access Point + Web Server)
 void startConfigMode() {
-    Serial.println("Starting configuration mode...");
+    Serial.println("Starting configuration mode.");
     
     // Create Access Point
     WiFi.mode(WIFI_AP);
@@ -254,10 +255,13 @@ void startConfigMode() {
     
     Serial.println("Web server started");
     
-    // Keep server running
+    // Keep server running until config button is pressed again
     while (true) {
         server.handleClient();
         delay(10);
+        if (digitalRead(CONFIG_PIN) == LOW) { 
+            break;
+        }
     }
 }
 
@@ -371,8 +375,49 @@ void print_wakeup_reason(){
     case ESP_SLEEP_WAKEUP_TIMER : Serial.println("Wakeup caused by timer"); break;
     case ESP_SLEEP_WAKEUP_TOUCHPAD : Serial.println("Wakeup caused by touchpad"); break;
     case ESP_SLEEP_WAKEUP_ULP : Serial.println("Wakeup caused by ULP program"); break;
-    default : Serial.printf("Wakeup was not caused by deep sleep: %d\n",wakeup_reason); break;
+    default : Serial.printf("Wakeup caused by : %d\n",wakeup_reason); break;
   }
+}
+
+// Spinner animation demo
+void demoMode() {
+    const uint8_t minBarY = 0;
+    const uint8_t maxBarY = 6;
+    const uint8_t minBarHeight = 1;
+    const uint8_t maxBarHeight = 7;
+    const uint16_t minBarWidth = 10;
+    const uint16_t maxExtraBarWidth = 48;
+    const float rotationPeriodMs = 2100.0f; 
+    const float pulsePeriodMs = 1400.0f; 
+    const uint32_t frameDelayMs = 50;      
+
+    uint32_t animationStartMs = millis();
+
+    do {
+        uint32_t elapsedMs = millis() - animationStartMs;
+        float rotationPhase = (static_cast<float>(elapsedMs % static_cast<uint32_t>(rotationPeriodMs)) / rotationPeriodMs) * 2.0f * PI;
+        float pulsePhase = (static_cast<float>(elapsedMs % static_cast<uint32_t>(pulsePeriodMs)) / pulsePeriodMs) * 2.0f * PI;
+
+        // Bar width: sharp pulse, more like a "tail"
+        float widthPulse = powf((sinf(pulsePhase) + 1.0f) * 0.5f, 1.7f); // sharper peak
+        uint16_t barWidth = minBarWidth + static_cast<uint16_t>(widthPulse * maxExtraBarWidth);
+
+        // Bar thickness: also varies, but less pronounced
+        float thicknessPulse = powf((sinf(pulsePhase + 1.2f) + 1.0f) * 0.5f, 1.3f); // phase offset for variety
+        uint8_t barHeight = minBarHeight + static_cast<uint8_t>(thicknessPulse * (maxBarHeight - minBarHeight));
+
+        // Center the bar vertically
+        uint8_t barY = minBarY + ((maxBarY - minBarY) / 2) - (barHeight / 2);
+
+        uint16_t barX = static_cast<uint16_t>(((rotationPhase / (2.0f * PI)) * displayWidth));
+
+        dotFlippersMatrix.clear(0);
+        dotFlippersMatrix.fillRect(barX, barY, barWidth, barHeight, 0xFF);
+        dotFlippersMatrix.display();
+
+        delay(frameDelayMs);
+
+    } while (digitalRead(CONFIG_PIN) != LOW); // stay in demo mode until config button is pressed
 }
 
 // Compute the image to display on the flipdot based on the current time
@@ -427,7 +472,7 @@ void display_time() {
 void setup() {
     // Setup the configuration pin
     pinMode(CONFIG_GPIO, INPUT_PULLUP);
-    // enable wake up from the configuration pin (active HIGH)
+    // enable wake up from the configuration pin
     rtc_gpio_init(CONFIG_GPIO); // needed for the pin to work as wakeup source
     rtc_gpio_set_direction(CONFIG_GPIO, RTC_GPIO_MODE_INPUT_ONLY);
     rtc_gpio_pulldown_dis(CONFIG_GPIO); // disable pull-down resistor for the config pin
@@ -448,8 +493,8 @@ void setup() {
     Serial.print("Battery voltage (mV): ");
     Serial.println(mainBatteryMiliVolts);
 
-    // print waking up reason 
-    print_wakeup_reason();
+    // for debug
+    // print_wakeup_reason();
     
     // Load configuration from storage
     loadConfig();
@@ -464,6 +509,16 @@ void setup() {
     dotFlippersMatrix.setTextColor(0xFF);
     dotFlippersMatrix.setTextWrap(false);  
 
+    // if battery is low, sleep for 10min and display a message.
+    if (mainBatteryMiliVolts < LOW_BATTERY_THRESHOLD) { 
+        dotFlippersMatrix.clear(0);
+        dotFlippersMatrix.display(); 
+        dotFlippersMatrix.setCursor(0, 0);
+        dotFlippersMatrix.print("Low battery: " + String(mainBatteryMiliVolts) + "mV");
+        dotFlippersMatrix.display();
+        goToDeepSleep10min();
+    }
+
     // Check if configuration button is pressed OR configuration is not initialized
     if (digitalRead(CONFIG_PIN) == LOW || !config.initialized || strlen(config.wifiSSID) == 0) {
         if (digitalRead(CONFIG_PIN) == LOW) {
@@ -472,8 +527,8 @@ void setup() {
             Serial.println("No WiFi configuration found - entering setup mode");
         }
 
-        startConfigMode();
-        // startConfigMode() runs forever, so we never reach here
+        startConfigMode(); // if we exit this function, it means we pressed the config button.
+        demoMode(); // So we start the demo mode, will return if config button is pressed again.
     }
 
     // configure timezone otherwise we may get wrong time from RTC which is not in UTC
@@ -501,7 +556,6 @@ void setup() {
     display_time();
 
     Serial.println(&timeinfo, "%A %d %B %Y %H:%M:%S");
-    Serial.println("Previous wifi sync day: " + String(dayOfLastSinceSync));
 
     disableWiFi();
 
@@ -516,27 +570,15 @@ void setup() {
     // go to deep sleep until the next minute (minus the compensation delay)
     // if Serial is not null, it means a PC is connected, so we stay awake for debugging purposes
     if (!Serial)  {
-        if (mainBatteryMiliVolts < LOW_BATTERY_THRESHOLD) {
-            dotFlippersMatrix.clear(0);
-            dotFlippersMatrix.display(); 
-            dotFlippersMatrix.setCursor(0, 0);
-            dotFlippersMatrix.print("Low battery: " + String(mainBatteryMiliVolts) + "mV");
-            dotFlippersMatrix.display();
-            goToDeepSleep10min();
-        } else if (timeinfo.tm_hour > 22 || timeinfo.tm_hour < 6) {
+        if (timeinfo.tm_hour > 22 || timeinfo.tm_hour < 6) {  // if it's night time, sleep for 10min.
             goToDeepSleep10min();
         } else {
             goToDeepSleep1min(compensationDelayS);
         }
-
     }
 }
 void loop() {
-    Serial.println("In loop. restarting in 30 seconds...");
+    Serial.println("Debugging loop. restarting in 30 seconds.");
     delay(30000);
     ESP.restart();
 }
-
-
-
-
