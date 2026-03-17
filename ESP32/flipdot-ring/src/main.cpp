@@ -249,7 +249,7 @@ void startConfigMode() {
     flipdotMatrix.clear(0);
     flipdotMatrix.display(); 
     flipdotMatrix.setCursor(0, 0);
-    flipdotMatrix.print("WiFi FlipClock:12345678 http://192.168.4.1 ");
+    flipdotMatrix.print("WiFi FlipClock:12345678 http://192.168.4.1 "+ String(mainBatteryMiliVolts));
     flipdotMatrix.display();
     
     // Initialize web server
@@ -398,7 +398,7 @@ void configureFlipdotforLowPower() {
 void configureFlipdotForDemo() {
     flipdotMatrix.setCustomConfiguration(true);
     flipdotMatrix.setForceFlipping(false);
-    flipdotMatrix.setDriversPowerSaving(false);
+    flipdotMatrix.setDriversPowerSaving(true);
     flipdotMatrix.setDotFlipTime(2); 
     flipdotMatrix.setXshift(0);
     flipdotMatrix.setTextColor(0xFF);
@@ -407,15 +407,12 @@ void configureFlipdotForDemo() {
 
 // Spinner animation demo
 void demoMode() {
-    const uint8_t minBarY = 0;
-    const uint8_t maxBarY = 6;
-    const uint8_t minBarHeight = 1;
     const uint8_t maxBarHeight = 7;
     const uint16_t minBarWidth = 10;
     const uint16_t maxExtraBarWidth = 48;
-    const float rotationPeriodMs = 2100.0f; 
-    const float pulsePeriodMs = 1400.0f; 
-    const uint32_t frameDelayMs = 50;      
+    const float rotationPeriodMs = 3200.0f; 
+    const float pulsePeriodMs = 2100.0f; 
+    const uint32_t frameDelayMs = 30;      
 
     configureFlipdotForDemo();
 
@@ -432,10 +429,10 @@ void demoMode() {
 
         // Bar thickness: also varies, but less pronounced
         float thicknessPulse = powf((sinf(pulsePhase + 1.2f) + 1.0f) * 0.5f, 1.3f); // phase offset for variety
-        uint8_t barHeight = minBarHeight + static_cast<uint8_t>(thicknessPulse * (maxBarHeight - minBarHeight));
+        uint8_t barHeight = 1 + static_cast<uint8_t>(thicknessPulse * (maxBarHeight));
 
         // Center the bar vertically
-        uint8_t barY = minBarY + ((maxBarY - minBarY) / 2) - (barHeight / 2);
+        uint8_t barY = 3 - (barHeight / 2);
 
         uint16_t barX = static_cast<uint16_t>(((rotationPhase / (2.0f * PI)) * displayWidth));
 
