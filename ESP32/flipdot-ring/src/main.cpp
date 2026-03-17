@@ -385,6 +385,26 @@ void print_wakeup_reason(){
   }
 }
 
+void configureFlipdotforLowPower() {
+    flipdotMatrix.setCustomConfiguration(config.customConfiguration);
+    flipdotMatrix.setForceFlipping(config.forceFlipping);
+    flipdotMatrix.setDriversPowerSaving(config.driversPowerSaving);
+    flipdotMatrix.setDotFlipTime(config.dotFlipTime); 
+    flipdotMatrix.setXshift(0);
+    flipdotMatrix.setTextColor(0xFF);
+    flipdotMatrix.setTextWrap(false); 
+}
+
+void configureFlipdotForDemo() {
+    flipdotMatrix.setCustomConfiguration(true);
+    flipdotMatrix.setForceFlipping(false);
+    flipdotMatrix.setDriversPowerSaving(false);
+    flipdotMatrix.setDotFlipTime(2); 
+    flipdotMatrix.setXshift(0);
+    flipdotMatrix.setTextColor(0xFF);
+    flipdotMatrix.setTextWrap(false); 
+}
+
 // Spinner animation demo
 void demoMode() {
     const uint8_t minBarY = 0;
@@ -487,26 +507,6 @@ void display_LowBatteryMessage() {
     flipdotMatrix.print("Low battery. ( " + String(mainBatteryMiliVolts) + "mV )");
     flipdotMatrix.display();
 
-}
-
-void configureFlipdotforLowPower() {
-    flipdotMatrix.setCustomConfiguration(config.customConfiguration);
-    flipdotMatrix.setForceFlipping(config.forceFlipping);
-    flipdotMatrix.setDriversPowerSaving(config.driversPowerSaving);
-    flipdotMatrix.setDotFlipTime(config.dotFlipTime); 
-    flipdotMatrix.setXshift(0);
-    flipdotMatrix.setTextColor(0xFF);
-    flipdotMatrix.setTextWrap(false); 
-}
-
-void configureFlipdotForDemo() {
-    flipdotMatrix.setCustomConfiguration(true);
-    flipdotMatrix.setForceFlipping(false);
-    flipdotMatrix.setDriversPowerSaving(false);
-    flipdotMatrix.setDotFlipTime(2); 
-    flipdotMatrix.setXshift(0);
-    flipdotMatrix.setTextColor(0xFF);
-    flipdotMatrix.setTextWrap(false); 
 }
 
 // we start here.
