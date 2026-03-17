@@ -15,7 +15,7 @@ const char* ntpServer = "pool.ntp.org";
 static const char* PARIS_TZ = "CET-1CEST,M3.5.0/2,M10.5.0/3";
 RTC_DATA_ATTR static int dayOfLastSinceSync = -1;
 
-const uint16_t displayWidth = 288;
+const uint16_t displayWidth = 288; // or 48 characters of 6 pixels width
 const uint16_t displayHeight = 7;
 const int CONFIG_PIN = D0; // GPIO pin to enter configuration mode 
 const gpio_num_t CONFIG_GPIO = GPIO_NUM_0;
@@ -27,19 +27,20 @@ struct Config {
     char wifiSSID[32];
     char wifiPassword[64];
     char timezone[64];
-    bool customConfiguration;
-    bool forceFlipping;
-    bool driversPowerSaving;
-    uint8_t dotFlipTime;
+    bool customConfiguration;   // flipdot boards will take a custom config in account.
+    bool forceFlipping;         // force flipping even if the content is the same as previous frame
+    bool driversPowerSaving;    // Switch off the flipdot drivers 5V power rail after latching
+    uint8_t dotFlipTime;        // custom flip time for the dots in 100us unit, between 1 (100us) and 15 (1500us)
     bool initialized;
 };
 
 // global vars
 struct tm timeinfo;
-DotFlippersMatrix dotFlippersMatrix = DotFlippersMatrix(displayWidth, displayHeight);
+DotFlippersMatrix flipdotMatrix = DotFlippersMatrix(displayWidth, displayHeight);
 Preferences preferences;
 Config config;
 WebServer server(80);
+int mainBatteryMiliVolts;
 
 // Load configuration from preferences (or set defaults if not found)
 void loadConfig() {
@@ -86,6 +87,7 @@ void saveConfig() {
     Serial.println("Configuration saved to storage");
 }
 
+// Escape HTML special characters in a string
 String escapeHtml(const char *input) {
     String out;
     if (!input) {
@@ -106,6 +108,7 @@ String escapeHtml(const char *input) {
     return out;
 }
 
+// Build the HTML configuration page with current settings
 String buildConfigPageHtml() {
     String page = FPSTR(htmlPage);
 
@@ -128,11 +131,12 @@ String buildConfigPageHtml() {
     return page;
 }
 
-// Web server handlers
+// Web server handler for the root page
 void handleRoot() {
     server.send(200, "text/html", buildConfigPageHtml());
 }
 
+// Web server handler for saving configuration
 void handleSave() {
     if (server.hasArg("ssid")) {
         String ssid = server.arg("ssid");
@@ -170,6 +174,7 @@ void handleSave() {
     }
 }
 
+// Web server handler for setting time manually, used when no WiFi connection is available.
 void handleSetTime() {
     if (!server.hasArg("setHour") || !server.hasArg("setMinute") || !server.hasArg("setDay") || !server.hasArg("setMonth") || !server.hasArg("setYear")) {
         server.send(400, "text/plain", "Missing date/time parameters");
@@ -241,11 +246,11 @@ void startConfigMode() {
     Serial.println("Then open http://192.168.4.1 in your browser");
     
     // Display setup info on flipdot display
-    dotFlippersMatrix.clear(0);
-    dotFlippersMatrix.display(); 
-    dotFlippersMatrix.setCursor(0, 0);
-    dotFlippersMatrix.print("WiFi FlipClock:12345678  http://192.168.4.1");
-    dotFlippersMatrix.display();
+    flipdotMatrix.clear(0);
+    flipdotMatrix.display(); 
+    flipdotMatrix.setCursor(0, 0);
+    flipdotMatrix.print("WiFi FlipClock:12345678 http://192.168.4.1 ");
+    flipdotMatrix.display();
     
     // Initialize web server
     server.on("/", handleRoot);
@@ -265,6 +270,7 @@ void startConfigMode() {
     }
 }
 
+// WiFi event handler
 void WiFiEvent(WiFiEvent_t event, WiFiEventInfo_t info) {
     switch (event) {
 
@@ -324,7 +330,7 @@ void connectWiFi() {
     }
 }
 
-//disable WiFi completely
+// disable WiFi completely
 void disableWiFi() {
     WiFi.persistent(false);
     WiFi.disconnect(true);
@@ -342,11 +348,10 @@ void goToDeepSleep1min(int negativeDelayS = 0) {
     Serial.end();
     delay(100);
     esp_sleep_enable_timer_wakeup((60 - negativeDelayS) * 1000000ULL);
-    // esp_sleep_enable_timer_wakeup(10 * 1000000ULL);
     esp_deep_sleep_start();
 }
 
-// go into deep sleep for 10 minute
+// go into deep sleep for 10 minutes
 void goToDeepSleep10min() {
     Serial.println("Going to deep sleep for 10min ");
     Serial.flush(); 
@@ -363,6 +368,7 @@ void configTimeZone() {
     tzset();
 }
 
+// print the reason for wake up, used for debug
 void print_wakeup_reason(){
   esp_sleep_wakeup_cause_t wakeup_reason;
 
@@ -391,6 +397,8 @@ void demoMode() {
     const float pulsePeriodMs = 1400.0f; 
     const uint32_t frameDelayMs = 50;      
 
+    configureFlipdotForDemo();
+
     uint32_t animationStartMs = millis();
 
     do {
@@ -411,9 +419,9 @@ void demoMode() {
 
         uint16_t barX = static_cast<uint16_t>(((rotationPhase / (2.0f * PI)) * displayWidth));
 
-        dotFlippersMatrix.clear(0);
-        dotFlippersMatrix.fillRect(barX, barY, barWidth, barHeight, 0xFF);
-        dotFlippersMatrix.display();
+        flipdotMatrix.clear(0);
+        flipdotMatrix.fillRect(barX, barY, barWidth, barHeight, 0xFF);
+        flipdotMatrix.display();
 
         delay(frameDelayMs);
 
@@ -421,51 +429,84 @@ void demoMode() {
 }
 
 // Compute the image to display on the flipdot based on the current time
-// minute digits at hour position.
+// the minute digits are at hour hand position.
 void display_time() {
-
     uint16_t xMinutePosition = 0;
     char buf[4];
     uint16_t xBox = 0;
     uint16_t boxWidth = 0;
 
-    // minutes in a char array
-    sniprintf(buf, 4, "%02d", timeinfo.tm_min);
+    configureFlipdotforLowPower();
     
-    // calculate x position of minutes, based on the hour and minute
+    // calculate x position of minutes chars start point, based on the hour and minute
     xMinutePosition = ((((timeinfo.tm_hour%12)/12.0)*(displayWidth)) + ((timeinfo.tm_min/60.0)*(14.0)));
 
-    // if the hour is between 3 and 9, draw minutes upside down, otherwise draw normally
-    if (timeinfo.tm_hour%12 >=3 && timeinfo.tm_hour%12 < 9) {
-        dotFlippersMatrix.drawCharsUpSideDown(xMinutePosition, 0, buf, 0xFF);
-    } else {
-        dotFlippersMatrix.setCursor(xMinutePosition, 0);
-        dotFlippersMatrix.print(String(buf));
-    }
-
-    // draw a box starting or ending at 0, up to the position of the minutes, to represent the hours
-    if ( (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24)) { // box following the digits
+    // draw a thick line starting or ending at 0, up to the position of the minutes, to ease the hours reading.
+    if ( (timeinfo.tm_hour >= 12 && timeinfo.tm_hour < 24)) { // box following the digits in the afternoon
         if (xMinutePosition < displayWidth-14) { // only if there is space to draw the box
             xBox = xMinutePosition+14;
-            boxWidth = displayWidth - (xMinutePosition+14);
+            boxWidth = displayWidth - xBox;
+            flipdotMatrix.fillRect(xBox, 2, boxWidth, 3, 0xFF);
         }
-    } else { // box preceding the digits
-        if (xMinutePosition > 3 && xMinutePosition < displayWidth-17) { 
+        if ( xMinutePosition <= 3) {  // we need to clear the space before the digits when the hour is 12.
+            flipdotMatrix.fillRect(displayWidth - (3-xMinutePosition), 2, (3-xMinutePosition), 3, 0x00);
+        }
+    } else { // box preceding the digits in the morning
+        if (xMinutePosition > 3 ) { // only if there is space to draw the box
             xBox = 0;
             boxWidth = xMinutePosition-3;
-        } else if (xMinutePosition >= displayWidth-17) {
-            // add an offset to the start of the box when time is arount 11:55
-            // to avoid the last minute digit to touch the start of the box (circular display).
-            xBox = 3-(displayWidth-(xMinutePosition+11));
-            boxWidth = displayWidth-14-xBox;
+            flipdotMatrix.fillRect(xBox, 2, boxWidth, 3, 0xFF);
+        }
+        if ( xMinutePosition >= displayWidth-14) {  // we need to clear the space after the digits when the hour is 23.
+            flipdotMatrix.fillRect(0, 2, 3-(displayWidth - (xMinutePosition+14)), 3, 0x00);
         }
     }
 
-    dotFlippersMatrix.fillRect(xBox, 2, boxWidth, 3, 0xFF);
+    // minutes in a char array
+    sniprintf(buf, 4, "%02d", timeinfo.tm_min);
+
+    // if the hour is between 3 and 9, draw minutes chars upside down, otherwise draw normally
+    if (timeinfo.tm_hour%12 >=3 && timeinfo.tm_hour%12 < 9) {
+        flipdotMatrix.drawCharsUpSideDown(xMinutePosition, 0, buf, 0xFF);
+    } else {
+        flipdotMatrix.setTextColor(0xFF);
+        flipdotMatrix.setCursor(xMinutePosition, 0);
+        flipdotMatrix.print(String(buf));
+    }
 
     // refresh flipdot display
-    dotFlippersMatrix.display();
+    flipdotMatrix.display();
+}
 
+// Display a low battery message on the flipdot
+void display_LowBatteryMessage() {
+    configureFlipdotforLowPower();
+    flipdotMatrix.clear(0);
+    flipdotMatrix.display(); 
+    flipdotMatrix.setCursor(0, 0);
+    flipdotMatrix.print("Low battery. ( " + String(mainBatteryMiliVolts) + "mV )");
+    flipdotMatrix.display();
+
+}
+
+void configureFlipdotforLowPower() {
+    flipdotMatrix.setCustomConfiguration(config.customConfiguration);
+    flipdotMatrix.setForceFlipping(config.forceFlipping);
+    flipdotMatrix.setDriversPowerSaving(config.driversPowerSaving);
+    flipdotMatrix.setDotFlipTime(config.dotFlipTime); 
+    flipdotMatrix.setXshift(0);
+    flipdotMatrix.setTextColor(0xFF);
+    flipdotMatrix.setTextWrap(false); 
+}
+
+void configureFlipdotForDemo() {
+    flipdotMatrix.setCustomConfiguration(true);
+    flipdotMatrix.setForceFlipping(false);
+    flipdotMatrix.setDriversPowerSaving(false);
+    flipdotMatrix.setDotFlipTime(2); 
+    flipdotMatrix.setXshift(0);
+    flipdotMatrix.setTextColor(0xFF);
+    flipdotMatrix.setTextWrap(false); 
 }
 
 // we start here.
@@ -489,7 +530,8 @@ void setup() {
     
     // ADC: Set the resolution to 12 bits (0-4095)
     analogReadResolution(12);
-    int mainBatteryMiliVolts = analogReadMilliVolts(BATTERY_PIN);
+    // read battery voltage in millivolts
+    mainBatteryMiliVolts = analogReadMilliVolts(BATTERY_PIN);
     Serial.print("Battery voltage (mV): ");
     Serial.println(mainBatteryMiliVolts);
 
@@ -499,23 +541,12 @@ void setup() {
     // Load configuration from storage
     loadConfig();
     
-    // initialize flipdot display
-    dotFlippersMatrix.begin();
-    dotFlippersMatrix.setCustomConfiguration(config.customConfiguration); // use configured setting
-    dotFlippersMatrix.setForceFlipping(config.forceFlipping);
-    dotFlippersMatrix.setDriversPowerSaving(config.driversPowerSaving);
-    dotFlippersMatrix.setDotFlipTime(config.dotFlipTime); // use configured flip time 
-    dotFlippersMatrix.setXshift(0);
-    dotFlippersMatrix.setTextColor(0xFF);
-    dotFlippersMatrix.setTextWrap(false);  
-
+    // Start flipdot display instance
+    flipdotMatrix.begin();
+    
     // if battery is low, sleep for 10min and display a message.
     if (mainBatteryMiliVolts < LOW_BATTERY_THRESHOLD) { 
-        dotFlippersMatrix.clear(0);
-        dotFlippersMatrix.display(); 
-        dotFlippersMatrix.setCursor(0, 0);
-        dotFlippersMatrix.print("Low battery: " + String(mainBatteryMiliVolts) + "mV");
-        dotFlippersMatrix.display();
+        display_LowBatteryMessage();
         goToDeepSleep10min();
     }
 
@@ -544,8 +575,9 @@ void setup() {
     if (dayOfLastSinceSync == -1 || (timeinfo.tm_hour == 12 && timeinfo.tm_mday != dayOfLastSinceSync)) {
         Serial.println("Connect to Wifi and sync time with NTP server. ");
         connectWiFi();
-        delay(1000);
+        delay(500);
         configTimeZone();
+        delay(500);
         if (getLocalTime(&timeinfo))  dayOfLastSinceSync = timeinfo.tm_mday;
         else Serial.println("Failed to obtain time 2");
     } else {
