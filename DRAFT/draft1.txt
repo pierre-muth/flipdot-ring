@@ -1,0 +1,61 @@
+<intro image>
+Intro:
+One can see a pattern in all those projects. Do I need doing repetitive tasks to relax ?
+I have a bunch of flipdots. Another custom flipdot display, with a more classical driving method using half bridge integrated integrated circuits. 
+<segment and divers IC image>
+
+Initial idea:
+Can we imagine a non-standard flipdot matrix : what about a ring
+How big the ring should be for the gaps due to angles to be acceptable
+Around 300 gives less than 2 degrees between segments
+Perfect for a big fancy clock.
+<hand drawing concept image>
+
+Electronic boards design:
+7 dots segments and FP2800a IC drivers explanations.
+Let's settle with 24 segments per boards. Not full usage of the FP2800a capabilities but will limit the board size and price, and improve refresh rate. Still it will be 12 boards, for a 288*7 dots matrix.  Matrix design, need a double diode per dot.
+<driving single dot image>
+The data bus of each FP2800a needs to be driven for each dots flip. It might result in a quite high data rate for if we use shift registers. Especially in a noisy environnement, flipdots looks like solenoids. 
+I go for daisy chained PIC microcontroller to drive the 2 FP2800a per board. Selected the PIC16F15356.
+<schematics image>
+Kicad sessions was a bit challenging as we have to work with angles. 4 layers, board to board power and signals. Coils driving track avoids signals, design the matrix.
+<PCB image>
+<soldering session image>
+
+PIC Software:
+Tricky 24 bytes circular buffer has to be implemented in the PIC. The SPI interrupt MCC generated code was too slow, had to optimize to reach 100KHz.
+As only 7 bit of each of the 24 bytes are used, the 24 bit[7] are used for configuration and data check. We can configure the time duration of the flipping, force or not the refresh of the dots state, and put in sleep or not the PIC. The FP2800a are consuming few mA each, Having 24 of them makes this consumption not negligible. So the PIC is powering them with a GPIO to be able to save power when not used.
+A 5ms timer is reset every received bytes on SPI. In such way, if there is a pause of 5ms or more, the data are latched and the dots are driven. There is a check if data received are multiple of 24 bytes, and if there is the 0xAA control byte. This mainly because of the absence of a chip select line and the noisy environnement.
+<flowchart of the PIC code image>
+<first sigle board drive GIF>
+
+Powering and consumption:
+We want to power everything with a battery to avoid any external wires. We have enough space for several batteries, and in a clock mode, the flipping only happens every minutes. Selected : 5x 18650 li-ion cells, a 5S BMS, modules for step-down to 5V and step-up to 24V
+<battery in the case image>
+Step-down and step-up consumption measurement, cheap vs pololu module.
+<polopu modules image>
+<full project diagram image>
+
+Clock rigid mechanical structure:
+The back plane is a single piece aluminium plate, and has been cut with a water jet. 
+<aluminium plate image>
+<all boards fixed on the aluminium plate image>
+
+Case:
+3D printed blocks designed in Fusion360. I kept in mind the future partner aesthetic acceptation test.
+<case drawing image>
+<full assembly image>
+
+Functionalities : 
+Need a good ESP32 dev board for low consumption: Selected Xiao ESP32C6
+- Wifi hot spot for setup,
+- Use wifi once a day to re-sync time with NTP,
+- Nigh mode with dots driving only every 10 min for quitter nights,
+- Main battery measurement to switch off before killing it,
+- Button to change mode,
+- Demo mode for showing off (after all the display is quite impressive),
+ESP32 is in Deep sleep most of the time for battery saving. Battery life time is around 40 days.
+
+Summary:
+It was a long journey, with around 12'000 (twelve thousands) solder joins. Yes I soldered everything by hand, I love my Metcal iron. Around 100 hours of printing, and I didn't count the hours of design and debugging fun. And what about the aesthetic test ? You tell me.
+<youtube video and final project pictures>
