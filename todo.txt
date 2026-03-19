@@ -23,8 +23,9 @@
     . done. ESP32 pin in pullup even in deep sleep.
     . done. it wakes up from sleep and set in configuration mode.
     . done. if button pressed a second time, launch demo mode.
+    . Demo should exit by itself after few seconds, no button to exit, it avoids deboucing
     . different watch faces ?
   - Night time.
     . done. Refresh only eveny 10 min
     . Flip points only one by one
-    . Start and stop of night time in the config webpage.
+    . Start and stop hours of night time in the config webpage.
