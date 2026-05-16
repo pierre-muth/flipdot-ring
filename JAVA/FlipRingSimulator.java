@@ -15,12 +15,17 @@ import java.awt.geom.AffineTransform;
 import java.awt.geom.Ellipse2D;
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferByte;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
+
+import javax.imageio.stream.FileImageOutputStream;
+import javax.imageio.stream.ImageOutputStream;
+import javax.swing.JComboBox;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.Timer;
@@ -36,19 +41,33 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 	private BufferedImage sourceImage = new BufferedImage(xBufferSize, yBufferSize, BufferedImage.TYPE_BYTE_GRAY);
 	private static Font font_8 = new Font(Font.MONOSPACED, Font.PLAIN, 5);
 
-	private enum display_type {DIGITALHOURHAND, DIGITALMINUTEHAND, ANALOGHANDS, SCROLLINGDATE, ANIMATEDSINE, SPINNER};
-	private display_type displayType = display_type.SPINNER;
+	private String[] display_types = new String[] {"DIGITAL HOUR HAND", "DIGITAL MINUTE HAND", "ANALOG HANDS", "SCROLLING DATE", "ANIMATED SINE", "SPINNER"};
+	private String displayType = display_types[1];
 	private DecimalFormat formater = new DecimalFormat("00");
 	private int animationStep = 0;
 	long animationStartMs = System.currentTimeMillis();
+	
+	private GifSequenceWriter gifWriter;
+	private ImageOutputStream outputGif;
+	private static final String OUTPUT_GIF_FILENAME = "c:\\tmp\\clock.gif";
 
 	public FlipRingSimulator() {
-		setPreferredSize(new Dimension(400, 400));
+		setPreferredSize(new Dimension(400, 500));
 		setBackground(Color.darkGray);
 		setLayout(new BorderLayout());
 
 		display = new CircularDisplay(dotSize); 
 		add(display, BorderLayout.CENTER);
+		
+		JComboBox<String> jcbWatchface = new JComboBox<String>(display_types);
+		jcbWatchface.addActionListener(new ActionListener() {
+			@Override
+			public void actionPerformed(ActionEvent e) {
+				displayType = display_types[jcbWatchface.getSelectedIndex()];
+			}
+		});
+		
+		add(jcbWatchface, BorderLayout.NORTH);
 
 		try {
 			GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
@@ -59,9 +78,19 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 		} catch (FontFormatException | IOException e) {
 			e.printStackTrace();
 		}
+		
+		try {
+			outputGif = new FileImageOutputStream(new File(OUTPUT_GIF_FILENAME));
+			gifWriter = new GifSequenceWriter(outputGif, BufferedImage.TYPE_INT_RGB, (int)(1000.0/FPS), true);
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		}
+
 
 		Timer t = new Timer((int) (1000.0/FPS), this);
 		t.start();
+		
+		
 	}
 
 	private void drawSpinner(Graphics2D gsource) {
@@ -210,34 +239,23 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 		gsource.setColor(Color.black);
 		gsource.fillRect(0, 0, xBufferSize, yBufferSize);
 
-		switch (displayType) {
-		case DIGITALHOURHAND:
+		if (displayType.compareToIgnoreCase(display_types[0]) == 0)
 			drawDigitalHourHand(gsource, animationStep);
-			break;
 
-		case DIGITALMINUTEHAND:
+		if (displayType.compareToIgnoreCase(display_types[1]) == 0)
 			drawDigitalMinuteHand(gsource, animationStep);
-			break;
 
-		case ANALOGHANDS:
+		if (displayType.compareToIgnoreCase(display_types[2]) == 0)
 			drawAnalogHands(gsource, animationStep);
-			break;
 
-		case SCROLLINGDATE:
+		if (displayType.compareToIgnoreCase(display_types[3]) == 0)
 			drawScrollingDate(gsource, animationStep);
-			break;
 
-		case ANIMATEDSINE:
+		if (displayType.compareToIgnoreCase(display_types[4]) == 0)
 			drawAnimatedWave(gsource, animationStep);
-			break;
 
-		case SPINNER:
+		if (displayType.compareToIgnoreCase(display_types[5]) == 0)
 			drawSpinner(gsource);
-			break;
-
-		default:
-			break;
-		}
 
 	}
 
@@ -250,6 +268,33 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 		gsource.dispose();
 		sourceImageToDisplay();
 	}
+	
+	// gif capture tests
+    //            System.out.println("frameNumber: "+frameNumber);
+    //            if (frameNumber < 500 && gifRecord) {
+    //                appRectangle = getBounds();
+    //                appRectangle.setLocation(getLocationOnScreen());
+    //                BufferedImage newImage = robot.createScreenCapture(appRectangle);
+    //                
+    //                try {
+    //                    gifWriter.writeToSequence(newImage);
+    //                } catch (IOException e1) {
+    //                    e1.printStackTrace();
+    //                }
+    //                
+    //                frameNumber++;
+    //            }
+    //            
+    //            if (frameNumber == 500) {
+    //                try {
+    //                    gifWriter.close();
+    //                    outputGif.close();
+    //                } catch (IOException e) {
+    //                    e.printStackTrace();
+    //                }
+    //                frameNumber++;
+    //                System.out.println("Gif saved");
+    //            }
 
 	private void sourceImageToDisplay() {
 		int x, y;
@@ -400,7 +445,7 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 
 		JFrame frame = new JFrame("Flip-Ring");
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		frame.setSize(350, 370);
+		frame.setSize(350, 470);
 		frame.setBackground(Color.black);
 		frame.add(new FlipRingSimulator());
 		frame.setVisible(true);
