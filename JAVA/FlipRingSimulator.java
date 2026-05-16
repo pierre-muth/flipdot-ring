@@ -1,4 +1,4 @@
-package various_tests;
+package flipdot;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -47,7 +47,7 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 	private int animationStep = 0;
 	long animationStartMs = System.currentTimeMillis();
 	
-	private GifSequenceWriter gifWriter;
+//	private GifSequenceWriter gifWriter;
 	private ImageOutputStream outputGif;
 	private static final String OUTPUT_GIF_FILENAME = "c:\\tmp\\clock.gif";
 
@@ -59,7 +59,7 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 		display = new CircularDisplay(dotSize); 
 		add(display, BorderLayout.CENTER);
 		
-		JComboBox<String> jcbWatchface = new JComboBox<String>(display_types);
+		final JComboBox<String> jcbWatchface = new JComboBox<String>(display_types);
 		jcbWatchface.addActionListener(new ActionListener() {
 			@Override
 			public void actionPerformed(ActionEvent e) {
@@ -71,7 +71,7 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 
 		try {
 			GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
-			InputStream fontStream = this.getClass().getResourceAsStream("/various_tests/font8");
+			InputStream fontStream = this.getClass().getResourceAsStream("font8");
 			font_8 = Font.createFont(Font.TRUETYPE_FONT, fontStream);
 			ge.registerFont(font_8);
 			font_8 = new Font(font_8.getName(), Font.PLAIN, 8);
@@ -79,12 +79,12 @@ public class FlipRingSimulator extends JPanel implements ActionListener {
 			e.printStackTrace();
 		}
 		
-		try {
-			outputGif = new FileImageOutputStream(new File(OUTPUT_GIF_FILENAME));
-			gifWriter = new GifSequenceWriter(outputGif, BufferedImage.TYPE_INT_RGB, (int)(1000.0/FPS), true);
-		} catch (IOException e1) {
-			e1.printStackTrace();
-		}
+//		try {
+//			outputGif = new FileImageOutputStream(new File(OUTPUT_GIF_FILENAME));
+//			gifWriter = new GifSequenceWriter(outputGif, BufferedImage.TYPE_INT_RGB, (int)(1000.0/FPS), true);
+//		} catch (IOException e1) {
+//			e1.printStackTrace();
+//		}
 
 
 		Timer t = new Timer((int) (1000.0/FPS), this);
