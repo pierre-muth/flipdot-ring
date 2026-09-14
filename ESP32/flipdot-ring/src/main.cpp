@@ -20,7 +20,7 @@ const uint16_t displayHeight = 7;
 const int CONFIG_PIN = D0; // GPIO pin to enter configuration mode 
 const gpio_num_t CONFIG_GPIO = GPIO_NUM_0;
 const int BATTERY_PIN = A1; // ADC pin for battery voltage measurement
-const int LOW_BATTERY_THRESHOLD = 1650; // in millivolts
+const int LOW_BATTERY_THRESHOLD = 1650; // in millivolts, should be roughly 18v (3.6V per cell)
 
 // Configuration structure
 struct Config {
@@ -263,7 +263,7 @@ void startConfigMode() {
     // Keep server running until config button is pressed again
     while (true) {
         server.handleClient();
-        delay(10);
+        delay(50);
         if (digitalRead(CONFIG_PIN) == LOW) { 
             break;
         }
@@ -416,10 +416,14 @@ void demoMode() {
 
     configureFlipdotForDemo();
 
+    delay(200); // debouncing config button
+
     uint32_t animationStartMs = millis();
+    uint32_t elapsedMs = 0;
+    int configButtonState = HIGH;
 
     do {
-        uint32_t elapsedMs = millis() - animationStartMs;
+        elapsedMs = millis() - animationStartMs;
         float rotationPhase = (static_cast<float>(elapsedMs % static_cast<uint32_t>(rotationPeriodMs)) / rotationPeriodMs) * 2.0f * PI;
         float pulsePhase = (static_cast<float>(elapsedMs % static_cast<uint32_t>(pulsePeriodMs)) / pulsePeriodMs) * 2.0f * PI;
 
@@ -442,7 +446,39 @@ void demoMode() {
 
         delay(frameDelayMs);
 
-    } while (digitalRead(CONFIG_PIN) != LOW); // stay in demo mode until config button is pressed
+    } while ( digitalRead(CONFIG_PIN) != LOW && (elapsedMs < 10000) ); // stay in demo mode until config button is pressed or few seconds have passed
+
+    elapsedMs = 0;
+    animationStartMs = millis();
+    configButtonState = HIGH;
+
+    do {
+        elapsedMs = millis() - animationStartMs;
+        
+        flipdotMatrix.clear(1);
+        flipdotMatrix.display();
+        for (int i=0; i<100; i++) {
+            delay(100);
+            if (digitalRead(CONFIG_PIN) == LOW) {
+                configButtonState = LOW;
+            }
+        }
+        
+        flipdotMatrix.clear(0);
+        flipdotMatrix.display();
+        
+        for (int i=0; i<100; i++) {
+            delay(100);
+            if (digitalRead(CONFIG_PIN) == LOW) {
+                configButtonState = LOW;
+            }
+        }
+
+    } while ( configButtonState != LOW && (elapsedMs < 60000) ); // stay in demo mode until config button is pressed or few seconds have passed
+
+    flipdotMatrix.clear(0);
+    flipdotMatrix.display();
+    delay(200);
 }
 
 // Compute the image to display on the flipdot based on the current time
@@ -572,11 +608,12 @@ void setup() {
     if (dayOfLastSinceSync == -1 || (timeinfo.tm_hour == 12 && timeinfo.tm_mday != dayOfLastSinceSync)) {
         Serial.println("Connect to Wifi and sync time with NTP server. ");
         connectWiFi();
-        delay(500);
+        delay(3000);
         configTimeZone();
-        delay(500);
+        delay(3000);
         if (getLocalTime(&timeinfo))  dayOfLastSinceSync = timeinfo.tm_mday;
         else Serial.println("Failed to obtain time 2");
+        delay(3000);
     } else {
         Serial.println("Time already synced today, no need to connect to WiFi.");
     }
@@ -590,8 +627,8 @@ void setup() {
 
     // we can reduce the deep sleep time to wake up closer to the next minute
     int compensationDelayS = 0;
-    if (timeinfo.tm_sec > 3) compensationDelayS = 2; 
-    if (timeinfo.tm_sec > 25) compensationDelayS = 9; 
+    if (timeinfo.tm_sec > 5) compensationDelayS = 2; 
+    if (timeinfo.tm_sec > 25) compensationDelayS = 7; 
 
     // turn off built-in LED to indicate the device is going to sleep
     digitalWrite(LED_BUILTIN, HIGH); 
@@ -607,7 +644,13 @@ void setup() {
     }
 }
 void loop() {
-    Serial.println("Debugging loop. restarting in 30 seconds.");
-    delay(30000);
+    int seconds = 0;
+    Serial.println("Debugging loop. restarting in 60 seconds.");
+    
+    while( seconds < 60 && digitalRead(CONFIG_PIN) == HIGH) { 
+        delay(1000);
+        seconds++;
+    }
+
     ESP.restart();
 }
